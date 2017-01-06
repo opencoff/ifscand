@@ -1,0 +1,188 @@
+.\"	$OpenBSD: ifscanctl.8,v 1.274 2016/09/09 06:59:41 jasper Exp $
+.\"	$NetBSD: ifscanctl.8,v 1.11 1996/01/04 21:27:29 pk Exp $
+.\"     $FreeBSD: ifscanctl.8,v 1.16 1998/02/01 07:03:29 steve Exp $
+.\"
+.\" Copyright (c) 1983, 1991, 1993
+.\"	The Regents of the University of California.  All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. Neither the name of the University nor the names of its contributors
+.\"    may be used to endorse or promote products derived from this software
+.\"    without specific prior written permission.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\"
+.\"     @(#)ifscanctl.8	8.4 (Berkeley) 6/1/94
+.\"
+.Dd $Mdocdate: December 30 2016 $
+.Dt IFSCANCTL 8
+.Os
+.Sh NAME
+.Nm ifscanctl
+.Nd control the wifi management daemon
+.Sh SYNOPSIS
+.Nm ifscanctl
+.Ar interface
+.Ar command
+.Sh DESCRIPTION
+The
+.Nm
+program controls the
+.Xr ifscand 8
+daemon.
+.Pp
+The following commands are available:
+.Bl -tag -width Ds
+.It Cm add AP
+.Oo
+.Op Ar with BSSID
+.Op Ar using KEYTYPE
+.Op Ar key KEY
+.Op Ar mac MACADDR
+.Op Ar inet IP/MASK
+.Op Ar gw  GATEWAY
+.Op Ar inet6 IP/MASK
+.Op Ar gw6 GATEWAY
+.Oc
+.Pp
+Remember access point named "AP". The only mandatory argument
+is "AP". Optional keywords configure various elements of the
+association:
+.Pp
+.Bl -tag -width "inet6 IP6/MASK6" -compact
+.It with BSSID
+The "with" keyword pins a specific BSSID to the access
+point "AP". The BSSID should be specified as six colon separated
+hex values (e.g., 60:00:0a:18:2b:5c).
+.Pp
+.It using KEYTYPE
+The "using" keyword specifies a keytype. Valid values for
+KEYTYPE are "wep" and "wpa".
+.Pp
+.It key KEY
+The "key" keyword provides a shared secret key for joining with
+"AP". The key can be a string (WEP or WPA) or of the form
+``n:k1,k2,k3,k4'' where `n' specifies which of the keys will be used
+for transmitted packets, and the four keys - ``k1'' through ``k4''
+are configured as WEP keys. The length of WEP keys must be 40 bits
+for 64-bit encryption and 104 bits for 128-bit encryption.
+.Pp
+It is an error to use the "key" keyword without a corresponding
+"keytype" keyword and vice-versa.
+.Pp
+.It mac MAC
+The "mac" keyword configures the host (station) MAC address while
+joining to access point "AP". If MAC is the special value "random",
+then
+.Xr ifscand 8
+will generate a random MAC address for the host before joining. This
+can be verified by looking at 
+.Xr ifconfig 8
+output for the interface in question. While the "mac" keyword is optional
+we recommend using the "random" option whenever possible. It
+preserves user privacy (makes tracking hard).
+.Pp
+.It inet IP/MASK
+The "inet" keyword configures a static IPv4 address and netmask. The
+mask can be dotted-quad or CIDR format. e.g., both of the following
+are valid:
+.Pp
+.D1 192.168.11.20/255.255.255.0
+.D1 192.168.11.20/24
+.Pp
+.It gw GATEWAY
+Set GATEWAY as the default IPv4 gateway for the host. This is
+optional.
+.Pp
+.It inet6 IP6/MASK6
+The "inet6" keyword configures a static IPv6 address and netmask.
+.Pp
+.It gw6 GATEWAY6
+Set GATEWAY6 as the default IPv6 gateway for the host. This is
+optional.
+.Pp
+.El
+.Pp
+If neither "inet" or "inet6" are specified, the default is to use
+DHCP for obtaining an address for the interface. In this case, 
+.Xr ifscand 8
+starts and stops
+.Xr dhclient 8
+as needed to fetch the dynamic IP address for the interface.
+.Pp
+.It Cm del AP
+Forget access point "AP".
+.It Cm list
+Show list of remembered access points.
+.It Cm scan
+Scan the interface for access points and display the results.
+.It Cm down
+Gracefully shutdown
+.Xr ifscand 8
+and stop monitoring the interface in question.
+.It Cm set randmac Ar true | false
+Globally set the "randomize mac-address" property for any access
+points joined by
+.Xr ifscand 8 .
+This setting is used if the configuration for a specific access
+point does not have a "mac" property set.
+.It Cm set ap-order Ar AP1 Op Ar AP2...
+Sets the relative order of access points when more than one
+preferred access points are found.
+.It Cm get Ar all | randmac | ap-order
+Display all settings or a specific setting.
+.Pp
+.Sh EXAMPLES
+Add an access point with network id "home5G" and WPA password
+"frungulate":
+.Pp
+.Dl $ ifscanctl iwm0 add home5G using wpa key frungulate
+.Pp
+Add an access point with network id "FreeWireless", no password and
+randomized host MAC address:
+.Pp
+.Dl $ ifscanctl iwm0 add FreeWireless mac random
+.Pp
+Add an access point with network id "SecureWork" and WPA password
+"officiatus" and BSSID pinned to 57:00:1a:33:2f:bc:
+.Pp
+.Dl $ ifscanctl iwm0 add SecureWork with 57:00:1a:33:2f:bc using wpa key officiatus
+.Pp
+Add a 4G hotspot with network id "Pixelnet" and WPA password
+"unwirednet" and make it override any other visible access point:
+.Dl $ ifscanctl iwm0 add PixelNet using wpa key unwirednet
+.Dl $ ifscanctl iwm0 add ap-order PixelNet
+.Sh FILES
+.Bl -tag -width "/var/ifscand/prefs.db" -compact
+.It Pa /var/run/ifscand.if
+.Ux Ns -domain
+socket used for communication with
+.Xr ifscand 8 .
+.It Pa /var/ifscand/prefs.db
+Persistent database of preferred & configured WiFi access points.
+.El
+.Sh SEE ALSO
+.Xr ifscand 8 ,
+.Xr hostname.if 5 ,
+.Sh HISTORY
+The
+.Nm
+command first appeared in
+.Bx Open TBD.

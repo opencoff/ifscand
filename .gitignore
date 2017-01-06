@@ -27,6 +27,11 @@
 *.i*86
 *.x86_64
 *.hex
+ifscand/ifscand
+ifscanctl/ifscanctl
+
+# vim detritus
+.*.sw??
 
 # Debug files
 *.dSYM/

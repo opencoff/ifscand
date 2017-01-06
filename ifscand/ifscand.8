@@ -1,0 +1,131 @@
+.\"	$OpenBSD: ifscand.8,v 1.274 2016/09/09 06:59:41 jasper Exp $
+.\"	$NetBSD: ifscand.8,v 1.11 1996/01/04 21:27:29 pk Exp $
+.\"     $FreeBSD: ifscand.8,v 1.16 1998/02/01 07:03:29 steve Exp $
+.\"
+.\" Copyright (c) 1983, 1991, 1993
+.\"	The Regents of the University of California.  All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. Neither the name of the University nor the names of its contributors
+.\"    may be used to endorse or promote products derived from this software
+.\"    without specific prior written permission.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\"
+.\"     @(#)ifscand.8	8.4 (Berkeley) 6/1/94
+.\"
+.Dd $Mdocdate: December 30 2016 $
+.Dt IFSCAND 8
+.Os
+.Sh NAME
+.Nm ifscand
+.Nd automatically configure WiFi interface
+.Sh SYNOPSIS
+.Nm ifscand
+.Op Fl df
+.Ar interface
+.Sh DESCRIPTION
+The
+.Nm
+daemon is used to automatically join and disconnect to/from WiFi networks.
+.Pp
+.Nm
+maintains a persistent configuration of user provided WiFi networks,
+its credentials and other relevant 802.11 details.
+.Pp
+The following options are available:
+.Bl -tag -width Ds
+.It Fl d
+Run in debug mode - prints extra logs to syslog.
+.It Fl f
+Causes
+.Nm
+to run in the foreground (and NOT daemonize). This is useful in conjunction with
+-d for troubleshooting.
+.Ar interface
+parameter is a string of the form
+.Dq name unit ,
+for example,
+.Dq iwm0 .
+.Pp
+.Sh DETAILS OF OPERATION
+When
+.Nm
+starts up, it scans for Wifi networks. It shortlists user configured Access Points,
+selects the one with the strongest signal strength (RSSI) and joins it.
+Once joined, it invokes
+.Xr dhclient 8
+to configure the IP address, DNS and default gateway. If no Aaccess Point is found
+during the scan,
+.Nm
+sleeps for 60 seconds before attempting another scan.
+.Pp
+After a successful association with an Access Point,
+.Nm
+monitors the RSSI (signal strength) of the associated access point every 10 seconds.
+If the weighted average of the last 4 RSSI measurements falls below 8%,
+.Nm
+initiates a full scan to find another access point with higher signal strength.
+.Pp
+A companion utility -
+.Xr ifscanctl 8
+is used to configure
+.Nm
+and teach it about Access Points of interest.
+.Nm
+and
+.Xr ifscanctl 8
+communicate using an interface specific UNIX domain socket: /var/run/ifscand.if
+.Pp
+.Nm
+remembers its preferences and Access Points in a persistent Berkeley DB file: /var/ifscand/prefs.db.
+This file is shared by multiple
+.Nm
+instances. i.e., information about preferred Access Points is considered to be "global" to
+the machine in question and not tied to a specific interface.
+.Sh EXAMPLES
+Start
+.Nm
+for WiFi interface iwm0:
+.Pp
+.Dl # ifscand iwm0
+.Sh FILES
+.Bl -tag -width "/var/ifscand/prefs.db" -compact
+.It Pa /var/run/ifscand.if
+.Ux Ns -domain
+socket used for communication with
+.Xr ifscanctl 8 .
+.It Pa /var/ifscand/prefs.db
+Persistent database of configured and preferred WiFi networks.
+.El
+.Sh DIAGNOSTICS
+.Nm
+writes diagnostics to syslog under the facility daemon. When the "-d" flag
+is provided, additional debug messages provide more details into the
+progress of selecting and choosing a WiFi Access Point.
+.Sh SEE ALSO
+.Xr ifscanctl 8 ,
+.Xr hostname.if 5 ,
+.Xr ifconfig 8
+.Sh HISTORY
+The
+.Nm
+command first appeared in
+.Bx Open TBD
