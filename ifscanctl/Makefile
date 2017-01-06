@@ -9,6 +9,9 @@ SRCS=	ifscanctl.c $(libsrcs)
 
 MAN=	ifscanctl.8
 
+MANDIR = /usr/local/man/man
+BINDIR = /usr/local/bin
+
 # Comment for release builds
 #DEBUG=1
 

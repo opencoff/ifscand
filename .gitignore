@@ -31,7 +31,7 @@ ifscand/ifscand
 ifscanctl/ifscanctl
 
 # vim detritus
-.*.sw??
+.*.swp
 
 # Debug files
 *.dSYM/

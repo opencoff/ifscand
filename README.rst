@@ -144,16 +144,23 @@ For more details, consult the man page for ``ifscanctl``.
 
 How do I install it permanently?
 --------------------------------
-#. As 'root', copy etc/rc.d/ifscand to /etc/rc.d::
+#. As a non-root user, build the software::
 
-    # cp etc/rc.d/ifscand /etc/rc.d/
+    make
 
-#. As 'root', add the following line to ``/etc/rc.conf.local``::
+#. As 'root', do the following::
 
-        ifscand_flags-IFNAME
+    make install
 
-   Where ``IFNAME`` is the name of the WiFi interface for which
-   you want ``ifscand`` to run & monitor.
+   This will install the binaries and manpages to */usr/local/bin*
+   and */usr/local/man* respectively.
+   It will also append a fragment to */etc/rc.conf.local*. 
+
+#. Edit */etc/rc.conf.local* and configure the ``ifscand`` line with
+   the appropriate WiFi interface for your setup. e.g., if *iwm0* is
+   your WiFi interface, ::
+
+        ifscand_flags=iwm0
 
 #. "Unconfigure" ``/etc/hostname.IFNAME`` if you have previously
    configured the interface manually.
@@ -164,7 +171,7 @@ How do I install it permanently?
 
 How can I prevent leak of my MAC address to some APs
 ----------------------------------------------------
-``ifscand`` knows to randomize MAC addresses prior to joining an AP.
+``ifscand`` can randomize MAC addresses prior to joining an AP.
 In the example above, let us tell ``ifscand`` to use a random MAC
 address with "myap"::
 

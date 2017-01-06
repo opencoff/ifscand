@@ -34,3 +34,8 @@ DPADD=	${LIBUTIL}
 
 
 .include <bsd.prog.mk>
+
+afterinstall:
+	cp ../etc/rc.d/ifscand /etc/rc.d/
+	cat ../etc/rc.conf.local >> /etc/rc.conf.local
+

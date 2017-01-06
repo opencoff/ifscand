@@ -1,0 +1,3 @@
+# ifscand wifi management:
+# configure this with your wifi interface
+#ifscand_flags=
