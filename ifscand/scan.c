@@ -1,11 +1,11 @@
-/*	$OpenBSD: ifscand.c,v 1.330 2016/09/03 13:46:57 reyk Exp $
+/*  $OpenBSD: ifscand.c,v 1.330 2016/09/03 13:46:57 reyk Exp $
  *
  * scan.c - WiFi Scanning Logic
  *
  * Author Sudhi Herle <sudhi-at-herle.net>
  *
  * Copyright (c) 2016, 2017
- *	The Regents of the University of California.  All rights reserved.
+ *  The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

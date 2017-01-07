@@ -2,10 +2,12 @@
  *
  * ifcfg.c - Interface configuration
  *
- * Author  Sudhi Herle <sw at herle.net>
+ * Some parts liberally borrowed from OpenBSD ifconfig(8).
+ *
+ * Cleanups and other bits: Sudhi Herle <sw at herle.net>
  *
  * Copyright (c) 2016, 2017
- *	The Regents of the University of California.  All rights reserved.
+ *  The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -67,12 +69,12 @@ ifstate_init(ifstate *ifs, const char* ifname)
     strlcpy(ifr->ifr_name, ifname, sizeof ifr->ifr_name);
     strlcpy(ifs->ifname,   ifname, sizeof ifs->ifname);
 
-	ifs->scanfd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs->scanfd < 0) return -errno;
+    ifs->scanfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (ifs->scanfd < 0) return -errno;
 
-	if (ioctl(ifs->scanfd, SIOCGIFFLAGS, (caddr_t)ifr) < 0) return -errno;
+    if (ioctl(ifs->scanfd, SIOCGIFFLAGS, (caddr_t)ifr) < 0) return -errno;
 
-	flags = ifr->ifr_flags & 0xffff;
+    flags = ifr->ifr_flags & 0xffff;
 
     // Bring up the interface if needed
     if ((flags & IFF_UP) == 0) {
@@ -133,7 +135,7 @@ ifstate_close(ifstate *ifs)
 static int
 rssicmp(const void *nr1, const void *nr2)
 {
-	const struct ieee80211_nodereq *x = nr1, *y = nr2;
+    const struct ieee80211_nodereq *x = nr1, *y = nr2;
     int rx = RSSI(x),
         ry = RSSI(y);
 
@@ -153,8 +155,8 @@ int
 ifstate_scan(ifstate *ifs)
 {
     int i;
-	struct ieee80211_nodereq_all na;
-	struct ieee80211_nodereq nr[512];
+    struct ieee80211_nodereq_all na;
+    struct ieee80211_nodereq nr[512];
     nodevect *nv = &ifs->nv;
 
     VECT_RESET(nv);
@@ -235,17 +237,17 @@ ifstate_sprintf_node(char * buf, size_t  bsiz, struct ieee80211_nodereq *nr)
         PR("nwid \"%s\" chan %u bssid " MACFMT, zz, nr->nr_channel, sMAC(mac));
     }
 
-	if ((nr->nr_flags & IEEE80211_NODEREQ_AP) == 0) {
+    if ((nr->nr_flags & IEEE80211_NODEREQ_AP) == 0) {
         uint8_t *mac = nr->nr_macaddr;
         PR(" lladdr " MACFMT, sMAC(mac));
     }
 
-	if (nr->nr_max_rssi)
-		PR(" %u%% ", IEEE80211_NODEREQ_RSSI(nr));
-	else
-		PR(" %ddBm ", nr->nr_rssi);
+    if (nr->nr_max_rssi)
+        PR(" %u%% ", IEEE80211_NODEREQ_RSSI(nr));
+    else
+        PR(" %ddBm ", nr->nr_rssi);
 
-	if (nr->nr_pwrsave) PR(" powersave");
+    if (nr->nr_pwrsave) PR(" powersave");
 
     if ((nr->nr_flags & (IEEE80211_NODEREQ_AP)) == 0) {
 #if 0
@@ -269,27 +271,27 @@ ifstate_sprintf_node(char * buf, size_t  bsiz, struct ieee80211_nodereq *nr)
         PR(" %uM ", (nr->nr_rates[nr->nr_nrates - 1] & IEEE80211_RATE_VAL) / 2);
     }
 
-	/* ESS is the default, skip it */
-	nr->nr_capinfo &= ~IEEE80211_CAPINFO_ESS;
-	if (nr->nr_capinfo) {
-		//printb_status(nr->nr_capinfo, IEEE80211_CAPINFO_BITS);
-		if (nr->nr_capinfo & IEEE80211_CAPINFO_PRIVACY) {
-			if (nr->nr_rsnciphers & IEEE80211_WPA_CIPHER_CCMP)
+    /* ESS is the default, skip it */
+    nr->nr_capinfo &= ~IEEE80211_CAPINFO_ESS;
+    if (nr->nr_capinfo) {
+        //printb_status(nr->nr_capinfo, IEEE80211_CAPINFO_BITS);
+        if (nr->nr_capinfo & IEEE80211_CAPINFO_PRIVACY) {
+            if (nr->nr_rsnciphers & IEEE80211_WPA_CIPHER_CCMP)
                 PR(" wpa2");
-			else if (nr->nr_rsnciphers & IEEE80211_WPA_CIPHER_TKIP)
+            else if (nr->nr_rsnciphers & IEEE80211_WPA_CIPHER_TKIP)
                 PR(" wpa1");
             else
-				PR(" wep");
+                PR(" wep");
 
-			if (nr->nr_rsnakms & IEEE80211_WPA_AKM_8021X ||
-			    nr->nr_rsnakms & IEEE80211_WPA_AKM_SHA256_8021X)
-				PR(",802.1x");
-		}
-	}
+            if (nr->nr_rsnakms & IEEE80211_WPA_AKM_8021X ||
+                nr->nr_rsnakms & IEEE80211_WPA_AKM_SHA256_8021X)
+                PR(",802.1x");
+        }
+    }
 #if 0
-	if ((nr->nr_flags & IEEE80211_NODEREQ_AP) == 0)
-		printb_status(IEEE80211_NODEREQ_STATE(nr->nr_state),
-		    IEEE80211_NODEREQ_STATE_BITS);
+    if ((nr->nr_flags & IEEE80211_NODEREQ_AP) == 0)
+        printb_status(IEEE80211_NODEREQ_STATE(nr->nr_state),
+            IEEE80211_NODEREQ_STATE_BITS);
 #endif
 
     return orig - bsiz;
@@ -359,7 +361,7 @@ ifstate_unconfig(ifstate *ifs)
 static int
 setnwid(ifstate *ifs, const char *id)
 {
-	struct ieee80211_nwid nwid;
+    struct ieee80211_nwid nwid;
     
     if (!id) {
         memset(&nwid, 0, sizeof nwid);
@@ -371,7 +373,7 @@ setnwid(ifstate *ifs, const char *id)
     struct ifreq ifr = ifs->ifr;
     ifr.ifr_data     = (caddr_t)&nwid;
 
-	if (ioctl(ifs->scanfd, SIOCS80211NWID, (caddr_t)&ifr) < 0) return -errno;
+    if (ioctl(ifs->scanfd, SIOCS80211NWID, (caddr_t)&ifr) < 0) return -errno;
 
     return 0;
 }

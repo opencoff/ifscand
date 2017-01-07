@@ -1,9 +1,9 @@
-/*	$OpenBSD: ifconfig.c,v 1.330 2016/09/03 13:46:57 reyk Exp $	*/
-/*	$NetBSD: ifconfig.c,v 1.40 1997/10/01 02:19:43 enami Exp $	*/
+/*  $OpenBSD: ifconfig.c,v 1.330 2016/09/03 13:46:57 reyk Exp $ */
+/*  $NetBSD: ifconfig.c,v 1.40 1997/10/01 02:19:43 enami Exp $  */
 
 /*
  * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+ *  The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

@@ -5,7 +5,7 @@
  * Author Sudhi Herle <sudhi-at-herle.net>
  *
  * Copyright (c) 2016, 2017
- *	The Regents of the University of California.  All rights reserved.
+ *  The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -446,7 +446,7 @@ cmd_scan(cmd_state *s, char **args, int argc)
     ifstate_scan(s->ifs);
 
     nodevect *apv = &s->ifs->nv;
-	struct ieee80211_nodereq *nr;
+    struct ieee80211_nodereq *nr;
     
     if (VECT_SIZE(apv) == 0) return cmd_error(s, "no access points visible");
 

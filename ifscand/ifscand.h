@@ -1,11 +1,11 @@
-/*	$OpenBSD: ifscand.h,v 1.330 2016/09/03 13:46:57 reyk Exp $
+/*  $OpenBSD: ifscand.h,v 1.330 2016/09/03 13:46:57 reyk Exp $
  *
  * ifscand.h - WiFi Interface scan/join daemon
  *
  * Copyright (c) 2016 Sudhi Herle <sudhi at herle.net>
  *
  * Copyright (c) 2016, 2017
- *	The Regents of the University of California.  All rights reserved.
+ *  The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
