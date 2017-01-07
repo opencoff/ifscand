@@ -310,6 +310,10 @@ extern void printlog(int lev, const char *fmt, ...);
 // Print a debug log only if in Debug mode.
 extern void debuglog(const char *fmt, ...);
 
+// set FD_CLOEXEC flag on 'fd'
+// Return 0 on success; -errno on failure
+extern int fd_set_cloexec(int fd);
+
 
 extern int  ifstate_init(ifstate *ifs, const char* ifname);
 extern void ifstate_close(ifstate *ifs);

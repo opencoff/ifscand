@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <ctype.h>
 #include <arpa/inet.h>
@@ -46,8 +47,10 @@
 static int connect_ap(ifstate *s, const apdata *ap);
 
 static void do_scan(ifstate *s, int low_rssi);
-static void start_dhcp(const char *ifname);
-static void stop_dhcp();
+static void start_dhcp(ifstate *ifs);
+static void stop_dhcp(void);
+static void cleanup_state(ifstate *ifs);
+static void reopen_std_fds(void);
 
 /*
  * Measure RSSI and compare against previous values to determine if
@@ -194,7 +197,7 @@ check_rssi(ifstate *ifs)
  *  False   on failure
  */
 static int
-run_prog(char * const argv[], char * const env[])
+run_prog(ifstate *ifs, char * const argv[], char * const env[])
 {
     const char * const exe = argv[0];
     int                  r = valid_exe_p(exe);
@@ -212,6 +215,9 @@ run_prog(char * const argv[], char * const env[])
     }
 
     if (pid == 0) { // child
+        cleanup_state(ifs);
+        reopen_std_fds();
+
         chdir("/tmp");
         execve(exe, argv, env);
     } else {
@@ -237,12 +243,15 @@ run_prog(char * const argv[], char * const env[])
 
 /*
  * Run ifconfig(8) and route(8) to configure the interface.
+ *
+ * We clean the environment - and only set PATH. All other ENV vars
+ * are stripped.
  */
 static void
 ifconfig_up(ifstate *s, const apdata *ap)
 {
     char * const env[] = { "PATH=/sbin:/usr/sbin:/bin:/usr/bin", 0 };
-    char *args[32];
+    char *args[16];
 
     /*
      * IP Address configuration
@@ -257,8 +266,8 @@ ifconfig_up(ifstate *s, const apdata *ap)
         char rm4[32];
         char ip4[128];
 
-        inet_ntop(AF_INET, &ap->in4, rip4, sizeof rip4);
-        inet_ntop(AF_INET, &ap->mask4, rm4, sizeof rm4);
+        inet_ntop(AF_INET, &ap->in4,   rip4, sizeof rip4);
+        inet_ntop(AF_INET, &ap->mask4, rm4,  sizeof rm4);
 
         snprintf(ip4, sizeof ip4, "%s/%s", rip4, rm4);
 
@@ -267,15 +276,15 @@ ifconfig_up(ifstate *s, const apdata *ap)
         args[4] = "up";
         args[5] = 0;
 
-        if (!run_prog(args, env)) return;
+        if (!run_prog(s, args, env)) return;
     }
 
     if (ap->flags & AP_IN6) {
         char rip6[64];
         char rm6[64];
         char ip6[256];
-        inet_ntop(AF_INET6, &ap->in6, rip6, sizeof rip6);
-        inet_ntop(AF_INET6, &ap->mask6, rm6, sizeof rm6);
+        inet_ntop(AF_INET6, &ap->in6,   rip6, sizeof rip6);
+        inet_ntop(AF_INET6, &ap->mask6, rm6,  sizeof rm6);
 
         snprintf(ip6, sizeof ip6, "%s/%s", rip6, rm6);
 
@@ -284,8 +293,7 @@ ifconfig_up(ifstate *s, const apdata *ap)
         args[4] = "up";
         args[5] = 0;
 
-        run_prog(args, env);
-        if (!run_prog(args, env)) return;
+        if (!run_prog(s, args, env)) return;
     }
 
     if (ap->flags & AP_GW4) {
@@ -298,7 +306,7 @@ ifconfig_up(ifstate *s, const apdata *ap)
         args[4] = gw;
         args[5] = 0;
 
-        if (!run_prog(args, env)) return;
+        if (!run_prog(s, args, env)) return;
     }
 
     if (ap->flags & AP_GW6) {
@@ -311,7 +319,7 @@ ifconfig_up(ifstate *s, const apdata *ap)
         args[4] = gw;
         args[5] = 0;
 
-        if (!run_prog(args, env)) return;
+        if (!run_prog(s, args, env)) return;
     }
 }
 
@@ -333,7 +341,7 @@ connect_ap(ifstate *s, const apdata *ap)
     }
 
     if (!(ap->flags & (AP_IN4|AP_IN6))) {
-        start_dhcp(s->ifname);
+        start_dhcp(s);
         return 1;
     }
 
@@ -371,7 +379,7 @@ disconnect_ap(ifstate *s, const apdata *ap)
 static pid_t Dhpid = -1;
 
 static void
-start_dhcp(const char *ifname)
+start_dhcp(ifstate *ifs)
 {
     /* Lets try HUP'ing it */
     if (Dhpid > 0) {
@@ -387,7 +395,7 @@ start_dhcp(const char *ifname)
         return;
     }
 
-    const char * argv[] = { exe,  "-d", ifname, 0 };
+    const char * argv[] = { exe,  "-d", ifs->ifname, 0 };
     char * const envp[] = { "PATH=/sbin:/usr/sbin:/bin:/usr/bin", 0 };
 
     pid_t pid = fork();
@@ -398,12 +406,15 @@ start_dhcp(const char *ifname)
     }
 
 
-    if (pid == 0) {
-        chdir("/");
+    if (pid == 0) { // child
+        cleanup_state(ifs);
+        reopen_std_fds();
+
+        chdir("/tmp");
         execve(exe, argv, envp);
     }
 
-    debuglog("Started dhclient %s: PID %d", ifname, pid);
+    debuglog("Started dhclient %s: PID %d", ifs->ifname, pid);
 
     // Parent
     Dhpid = pid;
@@ -423,4 +434,55 @@ stop_dhcp()
 
         Dhpid = -1;
     }
+}
+
+
+// call after fork() before exec() -- in the child.
+static void
+cleanup_state(ifstate *ifs)
+{
+    closelog(); // syslog
+    ifstate_close(ifs);
+    db_close(ifs->db);
+}
+
+// redirect 0,1,2 to /dev/null
+// XXX Errors here are fatal?
+static void
+reopen_std_fds()
+{
+    int rfd, wfd;
+
+    if ((rfd = open("/dev/null", O_RDONLY)) < 0) {
+        printlog(LOG_ERR, "can't re-open /dev/null for reading: %s", strerror(errno));
+        return;
+    }
+
+    if ((wfd = open("/dev/null", O_WRONLY)) < 0) {
+        printlog(LOG_ERR, "can't re-open /dev/null for writing: %s", strerror(errno));
+        goto err1;
+    }
+
+    if (dup2(rfd, 0) < 0) {
+        printlog(LOG_ERR, "can't dup2 stdin: %s", strerror(errno));
+        goto err2;
+    }
+
+    if (dup2(wfd, 1) < 0) {
+        printlog(LOG_ERR, "can't dup2 stdout: %s", strerror(errno));
+        goto err2;
+    }
+
+    if (dup2(wfd, 2) < 0) {
+        printlog(LOG_ERR, "can't dup2 stderr: %s", strerror(errno));
+        goto err2;
+    }
+
+
+    // finally, close the new FDs and return
+err2:
+    close(wfd);
+    
+err1:
+    close(rfd);
 }

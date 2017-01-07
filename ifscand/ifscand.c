@@ -38,6 +38,7 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <sys/types.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -270,11 +271,34 @@ debuglog(const char *fmt, ...)
 
 
 /*
+ * set FD_CLOEXEC on the given fd.
+ *
+ * Return:
+ *  0 on success
+ *  -errno on failure
+ */
+int
+fd_set_cloexec(int fd)
+{
+    int r = fcntl(fd, F_GETFD, 0);
+    if (r < 0) return -errno;
+    if (r & FD_CLOEXEC) return 0;
+
+    r = fcntl(fd, F_SETFD, r | FD_CLOEXEC);
+    if (r < 0) return -errno;
+
+    return 0;
+}
+
+
+/*
  * Open a AF_UNIX socket for communication from the client.
  */
 static int
 opensock(const char *fn)
 {
+    int r;
+
     unlink(fn);
     
     int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -297,6 +321,9 @@ opensock(const char *fn)
      * XXX Which group?
      */
     if (chmod(fn, 0660) < 0) error(1, errno, "can't change permissions on %s", fn);
+
+    r = fd_set_cloexec(fd);
+    if (r < 0) error(1, -r, "can't set FD_CLOEXEC on fd");
 
     return fd;
 }

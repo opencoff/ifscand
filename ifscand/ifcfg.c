@@ -61,6 +61,7 @@ ifstate_init(ifstate *ifs, const char* ifname)
 {
     struct ifreq *ifr = &ifs->ifr;
     uint32_t flags = 0;
+    int r;
 
     memset(ifs, 0, sizeof *ifs);
 
@@ -71,6 +72,8 @@ ifstate_init(ifstate *ifs, const char* ifname)
 
     ifs->scanfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (ifs->scanfd < 0) return -errno;
+
+    if ((r = fd_set_cloexec(ifs->scanfd)) < 0) return r;
 
     if (ioctl(ifs->scanfd, SIOCGIFFLAGS, (caddr_t)ifr) < 0) return -errno;
 
