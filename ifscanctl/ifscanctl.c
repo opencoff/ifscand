@@ -67,7 +67,8 @@ main(int argc, const char *argv[])
     if (argc < 3) error(1, 0, "Usage: %s [options] ifname command\n", argv[0]);
 
     const char* ifname = argv[1];
-    size_t n = 1+snprintf(sockfile, sizeof sockfile, "%s.%s", IFSCAND_SOCK, ifname);
+    snprintf(sockfile, sizeof sockfile, "%s.%s", IFSCAND_SOCK, ifname);
+    size_t n = 1 + strlen(sockfile);    // +1 for trailing null
 
     if (n > sizeof un.sun_path) error(1, 0, "socket path %s too long?", sockfile);
 
@@ -129,13 +130,15 @@ arg2str(char *buf, size_t bsiz, int argc, const char *argv[])
 
     for (i = 0; i < argc-1; i++) {
         s = argv[i];
-        m = snprintf(p, n, hasws(s) ? "\"%s\" " : "%s ", s);
+        snprintf(p, n, hasws(s) ? "\"%s\" " : "%s ", s);
+        m  = strlen(p);
         p += m;
         n -= m;
     }
 
     s = argv[i];
-    m = snprintf(p, n, hasws(s) ? "\"%s\"" : "%s", s);
+    snprintf(p, n, hasws(s) ? "\"%s\"" : "%s", s);
+    m  = strlen(p);
     p += m;
     n -= m;
 

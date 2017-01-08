@@ -117,7 +117,7 @@ rssi_avg_add_sample(rssi_avg *a, int val)
 
 
 /*
- * Calculate the weighted average of the last RSSI_WS samples.
+ * Calculate the average of the last RSSI_WS samples.
  *
  * This only returns a good result when we have a full window.
  */
@@ -132,7 +132,7 @@ rssi_avg_value(rssi_avg *a)
 
     do {
         i += 1;
-        s += (a->val[r] * i) / RSSI_WS;
+        s += a->val[r];
         r  = (r + 1) % RSSI_WS;
     } while (r != a->wr);
 
@@ -297,7 +297,7 @@ size_t db_ap_sprintf(char *buf, size_t bsiz, apdata *a);
 
 extern int wifi_scan(ifstate *ifs);
 
-int disconnect_ap(ifstate *s, const apdata *ap);
+extern int disconnect_ap(ifstate *s, apdata *ap);
 
 /*
  * Initialize logging to syslog.
@@ -367,10 +367,9 @@ extern int cmd_process(cmd_state *s);
 /*
  * Global vars
  */
-extern const char* Up_script;       // /etc/ifscand/ifup
-extern const char* Down_script;      // /etc/ifscand/ifdown
-
-extern const char *Prefs_file;
+extern int Debug;       // set if running in debug mode
+extern int Foreground;  // set if NOT running as daemon
+extern int Network_cfg; // set if ifscand does network layer config
 
 #ifdef __cplusplus
 }

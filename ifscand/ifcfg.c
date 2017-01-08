@@ -221,8 +221,6 @@ ifstate_sprintf_node(char * buf, size_t  bsiz, struct ieee80211_nodereq *nr)
     size_t orig = bsiz;
     int i;
 
-#define sMAC(x)     x[0],x[1],x[2],x[3],x[4],x[5]
-#define MACFMT      "%02x:%02x:%02x:%02x:%02x:%02x"
 #define PR(a, ...)   do { \
                         ssize_t m = snprintf(buf, bsiz, a, ##__VA_ARGS__); \
                         buf  += m; \

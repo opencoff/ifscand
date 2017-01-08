@@ -4,10 +4,13 @@
 commonsrc= ../lib
 .PATH: $(commonsrc)
 
-libsrcs = error.c splitargs.c strtrim.c str2hex.c mkdirhier.c
+libsrcs= 	error.c splitargs.c strtrim.c str2hex.c mkdirhier.c
+asrcs= 		ifscand.c scan.c db.c cmds.c ifcfg.c
+
 PROG=	ifscand
-SRCS=	ifscand.c scan.c db.c cmds.c ifcfg.c \
-		$(libsrcs)
+
+SRCS=	$(asrcs) $(libsrcs)
+aobjs=	$(asrcs: .c=.o)
 
 MAN=	ifscand.8
 
@@ -39,3 +42,5 @@ afterinstall:
 	cp ../etc/rc.d/ifscand /etc/rc.d/
 	cat ../etc/rc.conf.local >> /etc/rc.conf.local
 
+
+$(aobjs): ifscand.h ../common.h

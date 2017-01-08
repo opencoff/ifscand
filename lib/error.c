@@ -53,10 +53,11 @@ error(int doexit, int errnum, const char *fmt, ...)
     va_start(ap, fmt);
 
     if (errnum > 0) {
-        n = snprintf(buf, sizeof buf, "%s: %s: %s", program_name, fmt, strerror(errnum));
+        snprintf(buf, sizeof buf, "%s: %s: %s", program_name, fmt, strerror(errnum));
     } else {
-        n = snprintf(buf, sizeof buf, "%s: %s", program_name, fmt);
+        snprintf(buf, sizeof buf, "%s: %s", program_name, fmt);
     }
+    n = strlen(buf);
     if (buf[n-1] != '\n') {
         buf[n++] = '\n';
         buf[n]  = 0;

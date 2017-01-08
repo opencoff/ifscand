@@ -55,8 +55,9 @@
 volatile uint32_t   Quit = 0;
 volatile uint32_t   Sig  = 0;
 
-int     Debug      = 0;
-int     Foreground = 0;
+int  Debug       = 0;
+int  Foreground  = 0;
+int  Network_cfg = 1;    // default
 
 static int opensock(const char *fn);
 static int sockready(int fd, int wr, int delay);
@@ -73,9 +74,10 @@ static const struct option Lopt[] = {
     {"help",        no_argument, 0, 'h'},
     {"debug",       no_argument, 0, 'd'},
     {"foreground",  no_argument, 0, 'f'},
+    {"no-network",  no_argument, 0, 'N'},
     {0, 0, 0, 0}
 };
-static const char Sopt[] = "hdf";
+static const char Sopt[] = "hdfN";
 
 static void
 sighandle(int sig)
@@ -100,6 +102,7 @@ usage()
            "Options:\n"
            "  --debug, -d       Run in debug mode (extra logs)\n"
            "  --foreground, -f  Don't daemonize into the background\n"
+           "  --no-network, -N  Don't do any network configuration\n"
            "  --help, -h        Show this help message and quit\n",
            program_name, program_name);
 
@@ -131,6 +134,10 @@ main(int argc, const char* argv[])
 
             case 'f':
                 Foreground = 1;
+                break;
+
+            case 'N':
+                Network_cfg = 0;
                 break;
         }
     }
@@ -166,13 +173,18 @@ main(int argc, const char* argv[])
     signal(SIGHUP,  sighandle);
     signal(SIGPIPE, sigignore);
 
-    printlog(LOG_INFO, "starting daemon for %s; listening on %s...", ifname, sockfile);
+    // Pledge and reduce privileges
+    // XXX Except - when forking dhclient and ifconfig we need
+    //     to open /dev/null etc.
+    //if (pledge("stdio rpath ioctl") < 0) error(1, errno, "can't pledge");
+
+    printlog(LOG_INFO, "starting daemon for %s %s network-config..", ifname,
+                Network_cfg ? "with" : "WITHOUT");
+    printlog(LOG_INFO, "Listening on %s, prefs in %s.db", sockfile, IFSCAND_PREFS);
+
 
     /* Run state machine on startup -- scan and setup before
-     * anything else. Since the state machine knows about "down" and
-     * "up" states, we implicitly set it to "up" when we start.
-     * An Administrative command ("down") will gracefully shutdown
-     * the daemon.
+     * anything else.
      */
     wifi_scan(&ifs);
 
@@ -239,6 +251,8 @@ main(int argc, const char* argv[])
 void
 initlog(const char *ifname)
 {
+    if (Foreground) return;
+
     static char buf[64];    // openlog() requires this to be constant! Grr.
     snprintf(buf, sizeof buf, "ifscand.%s", ifname);
 
@@ -248,11 +262,21 @@ initlog(const char *ifname)
 void
 printlog(int level, const char *fmt, ...)
 {
+    char buf[4096];
+
     va_list ap;
 
     va_start(ap, fmt);
-    vsyslog(LOG_DAEMON|level, fmt, ap);
+    vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
+
+    if (Foreground) {
+        size_t n = strlen(buf);
+        fputs(buf, stderr);
+        if (buf[n-1] != '\n') fputc('\n', stderr);
+    } else {
+        syslog(LOG_DAEMON|level, buf);
+    }
 }
 
 
@@ -262,11 +286,21 @@ debuglog(const char *fmt, ...)
 {
     if (!Debug) return;
 
+    char buf[4096];
+
     va_list ap;
 
     va_start(ap, fmt);
-    vsyslog(LOG_DAEMON|LOG_DEBUG, fmt, ap);
+    vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
+
+    if (Foreground) {
+        size_t n = strlen(buf);
+        fputs(buf, stderr);
+        if (buf[n-1] != '\n') fputc('\n', stderr);
+    } else {
+        syslog(LOG_DAEMON|LOG_DEBUG, buf);
+    }
 }
 
 

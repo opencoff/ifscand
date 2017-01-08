@@ -39,7 +39,10 @@
 .Nd automatically configure WiFi interface
 .Sh SYNOPSIS
 .Nm ifscand
-.Op Fl df
+.Op Fl Ndf
+.Op Fl -no-network
+.Op Fl -debug
+.Op Fl -foreground
 .Ar interface
 .Sh DESCRIPTION
 The
@@ -52,13 +55,15 @@ its credentials and other relevant 802.11 details.
 .Pp
 The following options are available:
 .Bl -tag -width Ds
-.It Fl d
+.It Fl N, -no-network
+Do NOT configure IP address; only configure link layer
+.It Fl d, -debug
 Run in debug mode - prints extra logs to syslog.
-.It Fl f
+.It Fl f, -foreground
 Causes
 .Nm
-to run in the foreground (and NOT daemonize). This is useful in conjunction with
--d for troubleshooting.
+to run in the foreground (and NOT daemonize). All logging information is sent to stderr.
+This is useful in conjunction with -d for troubleshooting.
 .Ar interface
 parameter is a string of the form
 .Dq name unit ,
@@ -117,7 +122,7 @@ Persistent database of configured and preferred WiFi networks.
 .El
 .Sh DIAGNOSTICS
 .Nm
-writes diagnostics to syslog under the facility daemon. When the "-d" flag
+In daemon mode, writes diagnostics to syslog under the facility daemon. When the "-d" flag
 is provided, additional debug messages provide more details into the
 progress of selecting and choosing a WiFi Access Point.
 .Sh SEE ALSO

@@ -97,10 +97,13 @@ static void
 db_put(apdb *db, const char * rkey, DBT *val)
 {
     char key[128];
-    size_t n = snprintf(key, sizeof key, "prefs.%s.%s", rkey, db->ifname);
     int r;
 
-    DBT k = { .data = key, .size = n };
+    snprintf(key, sizeof key, "prefs.%s.%s", rkey, db->ifname);
+
+    size_t n = strlen(key);
+    DBT k    = { .data = key, .size = n };
+
     r = db->db->put(db->db, &k, val, 0);
     if (r != 0) {
         printlog(LOG_ERR, "can't store %s: %s", key, strerror(errno));
@@ -115,9 +118,10 @@ static DBT
 db_get(apdb *db, const char* rkey)
 {
     char key[128];
-    size_t n = snprintf(key, sizeof key, "prefs.%s.%s", rkey, db->ifname);
 
-    DBT k = { .data = key, .size = n };
+    snprintf(key, sizeof key, "prefs.%s.%s", rkey, db->ifname);
+
+    DBT k = { .data = key, .size = strlen(key) };
     DBT v = { 0, 0 };
 
     db->db->get(db->db, &k, &v, 0);
@@ -193,9 +197,10 @@ db_set_apdata(apdb *db, const apdata *d)
 {
     uint8_t buf[1024];
     char key[256];
-    size_t n = snprintf(key, sizeof key, "ap.%s", d->apname);
 
-    DBT k = { .data = key, .size = n };
+    snprintf(key, sizeof key, "ap.%s", d->apname);
+
+    DBT k = { .data = key, .size = strlen(key) };
     DBT v = { .data = buf };
 
     v.size = pack_apdata(buf, sizeof buf, d);
@@ -236,7 +241,8 @@ db_filter_ap(apdb *db, apvect *av, nodevect *nv)
 
         copy_apname(nw, IEEE80211_NWID_LEN, nr);
 
-        k.size = snprintf(key, sizeof key, "ap.%s", nw);
+        snprintf(key, sizeof key, "ap.%s", nw);
+        k.size = strlen(key);
         if (0 != db->db->get(db->db, &k, &v, 0)) continue;
 
         unpack_apdata(&d, v.data, v.size);
@@ -259,7 +265,7 @@ db_filter_ap(apdb *db, apvect *av, nodevect *nv)
             }
         }
 
-        debuglog("scan: shortlisted known AP %s ..\n", d.apname);
+        debuglog("scan: shortlisted known AP %s [" MACFMT "]..\n", d.apname, sMAC(nr->nr_bssid));
         memcpy(d.nr_bssid, nr->nr_bssid, 6);
         d.nr_rssi     = nr->nr_rssi;
         d.nr_max_rssi = nr->nr_max_rssi;
@@ -329,8 +335,10 @@ db_set_ap_order(apdb *db, char **args, int argc)
 
     for (i = 0; i < argc; i++) {
         char *s  = args[i];
-        ssize_t m = 1 + snprintf(p, n, "%s", s);
 
+        snprintf(p, n, "%s", s);
+
+        ssize_t m = 1 + strlen(p);
         p += m;
         n -= m;
     }
@@ -385,9 +393,9 @@ int
 db_del_ap(apdb *db, const char *ap)
 {
     char key[256];
-    size_t n = snprintf(key, sizeof key, "ap.%s", ap);
+    snprintf(key, sizeof key, "ap.%s", ap);
 
-    DBT k = { .data = key, .size = n };
+    DBT k = { .data = key, .size = strlen(key) };
 
     db->db->del(db->db, &k, 0);
     db->db->sync(db->db, 0);
@@ -405,29 +413,11 @@ db_set_randmac(apdb *db, int val)
 }
 
 
-void
-db_set_scanint(apdb *db, int val)
-{
-    DBT d = { .data = &val, .size = sizeof val };
-
-    db_put(db, "scanint", &d);
-}
-
 
 int
 db_get_randmac(apdb *db)
 {
     return db_get_int(db, "randmac");
-}
-
-
-int
-db_get_scanint(apdb *db)
-{
-    int r = db_get_int(db, "scanint");
-
-    if (r == 0) r = 75;      // default scan interval
-    return r;
 }
 
 
@@ -441,7 +431,8 @@ fmt_ipmask(char *buf, size_t bsiz, char *fmt, int af, void *addr, void *mask)
     inet_ntop(af, addr, a, sizeof a);
     inet_ntop(af, mask, m, sizeof m);
 
-    return snprintf(buf, bsiz, fmt, a, m);
+    snprintf(buf, bsiz, fmt, a, m);
+    return strlen(buf);
 }
 
 static ssize_t
@@ -451,7 +442,8 @@ fmt_ip(char *buf, size_t bsiz, char *fmt, int af, void *addr)
 
     inet_ntop(af, addr, a, sizeof a);
 
-    return snprintf(buf, bsiz, fmt, a);
+    snprintf(buf, bsiz, fmt, a);
+    return strlen(buf);
 }
 
 
@@ -459,14 +451,16 @@ size_t
 db_ap_sprintf(char *buf, size_t bsiz, apdata *a)
 {
     size_t orig = bsiz;
-    ssize_t n   = snprintf(buf, bsiz, "\"%s\"", a->apname);
+    snprintf(buf, bsiz, "\"%s\"", a->apname);
 
+    ssize_t n = strlen(buf);
     buf  += n;
     bsiz -= n;
 
     if (a->flags & AP_MAC) {
         uint8_t *m = &a->apmac[0];
-        n = snprintf(buf, bsiz, " with %02x:%02x:%02x:%02x:%02x:%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
+        snprintf(buf, bsiz, " with " MACFMT, sMAC(m));
+        n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }
@@ -474,34 +468,37 @@ db_ap_sprintf(char *buf, size_t bsiz, apdata *a)
     if (a->keytype > 0) {
         switch (a->keytype) {
             default:
-                n = snprintf(buf, bsiz, " using %d", a->keytype);
+                snprintf(buf, bsiz, " using %d", a->keytype);
                 break;
 
             case AP_KEYTYPE_WPA: 
-                n = snprintf(buf, bsiz, " using wpa");
+                snprintf(buf, bsiz, " using wpa");
                 break;
             case AP_KEYTYPE_WEP: 
-                n = snprintf(buf, bsiz, " using wep");
+                snprintf(buf, bsiz, " using wep");
                 break;
         }
+        n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }
 
     // XXX Do we show the key or not?
     if (a->flags & AP_KEY) {
-        n = snprintf(buf, bsiz, " key \"%s\"", a->key);
+        snprintf(buf, bsiz, " key \"%s\"", a->key);
+        n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }
 
     if (a->flags & AP_MYMAC) {
         if (a->flags & AP_RANDMAC) {
-            n = snprintf(buf, bsiz, " mac random");
+            snprintf(buf, bsiz, " mac random");
         } else {
             uint8_t *m = &a->mymac[0];
-            n = snprintf(buf, bsiz, " mac " MACFMT, sMAC(m));
+            snprintf(buf, bsiz, " mac " MACFMT, sMAC(m));
         }
+        n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }

@@ -121,17 +121,14 @@ cmd_error(cmd_state *s, const char *fmt, ...)
 {
     char buf[1024];
     char out[1024];
-    ssize_t m;
     va_list ap;
 
     va_start(ap, fmt);
-
     snprintf(buf, sizeof buf, "ERROR: %s", fmt);
-
-    m = vsnprintf(out, sizeof out, buf, ap);
+    vsnprintf(out, sizeof out, buf, ap);
     va_end(ap);
 
-    fast_buf_push(&s->out, out, m);
+    fast_buf_push(&s->out, out, strlen(out));
     return -EINVAL;
 }
 
@@ -140,11 +137,10 @@ static void
 cmd_response_ok(cmd_state *s)
 {
     char out[128];
-    ssize_t m;
 
-    m = snprintf(out, sizeof out, "OK");
+    snprintf(out, sizeof out, "OK");
 
-    fast_buf_push(&s->out, out, m);
+    fast_buf_push(&s->out, out, strlen(out));
 }
 
 static int
@@ -489,21 +485,6 @@ cmd_set_randmac(cmd_state *s, char **args, int argc)
 }
 
 
-static int
-cmd_set_scanint(cmd_state *s, char **args, int argc)
-{
-    char *z = args[0];
-
-    int x = atoi(z);
-    if (x <= 0 || x > 1000)
-        return cmd_error(s, "invalid scan interval %s", z);
-
-    db_set_scanint(s->db, x);
-    cmd_response_ok(s);
-    return 1;
-}
-
-
 // configure relative AP order
 static int
 cmd_set_aporder(cmd_state *s, char **args, int argc)
@@ -531,9 +512,6 @@ cmd_set(cmd_state *s, char **args, int argc)
     if (0 == strcmp(sub, "randmac"))
         return cmd_set_randmac(s, args, argc);
 
-    if (0 == strcmp(sub, "scan-interval"))
-        return cmd_set_scanint(s, args, argc);
-
     if (0 == strcmp(sub, "ap-order"))
         return cmd_set_aporder(s, args, argc);
 
@@ -547,40 +525,32 @@ append_randmac(apdb *db, fast_buf *out)
 {
     char buf[64];
     int randmac = db_get_randmac(db);
-    size_t n = snprintf(buf, sizeof buf, "randmac %s\n", randmac ? "true" : "false");
-    fast_buf_push(out, buf, n);
+    snprintf(buf, sizeof buf, "randmac %s\n", randmac ? "true" : "false");
+    fast_buf_push(out, buf, strlen(buf));
 }
 
-static void
-append_scanint(apdb *db, fast_buf *out)
-{
-    char buf[64];
-    int scanint = db_get_scanint(db);
-    size_t n = snprintf(buf, sizeof buf, "scan-interval %d\n", scanint);
-    fast_buf_push(out, buf, n);
-}
 
 static void
 append_aporder(apdb *db, fast_buf *out)
 {
     char buf[256];
     strvect sv  = db_get_ap_order(db);
-    size_t i, n;
+    size_t i;
 
     if (VECT_SIZE(&sv) == 0) {
         fast_buf_append(out, '\n');
         goto end;
     }
 
-    n = snprintf(buf, sizeof buf, "ap-order");
-    fast_buf_push(out, buf, n);
+    snprintf(buf, sizeof buf, "ap-order");
+    fast_buf_push(out, buf, strlen(buf));
 
     for (i = 0; i < VECT_SIZE(&sv)-1; i++) {
-        n = snprintf(buf, sizeof buf, " \"%s\"", VECT_ELEM(&sv, i));
-        fast_buf_push(out, buf, n);
+        snprintf(buf, sizeof buf, " \"%s\"", VECT_ELEM(&sv, i));
+        fast_buf_push(out, buf, strlen(buf));
     }
-    n = snprintf(buf, sizeof buf, " \"%s\"\n", VECT_ELEM(&sv, i));
-    fast_buf_push(out, buf, n);
+    snprintf(buf, sizeof buf, " \"%s\"\n", VECT_ELEM(&sv, i));
+    fast_buf_push(out, buf, strlen(buf));
 
 end:
     VECT_FINI(&sv);
@@ -595,10 +565,8 @@ cmd_get(cmd_state *s, char **args, int argc)
 
     if (0 == strcmp(key, "all")) {
         append_randmac(s->db, &s->out);
-        append_scanint(s->db, &s->out);
         append_aporder(s->db, &s->out);
     } else if (0 == strcmp(key, "randmac"))       append_randmac(s->db, &s->out);
-      else if (0 == strcmp(key, "scan-interval")) append_scanint(s->db, &s->out);
       else if (0 == strcmp(key, "ap-order"))      append_aporder(s->db, &s->out);
       else return cmd_error(s, "unknown get subcommand '%s'", key);
 

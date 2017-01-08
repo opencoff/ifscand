@@ -237,6 +237,15 @@ Developer Notes
 
 TODO
 ====
+* privilege separation, pledge(2) of ``ifscand``:
+
+   #. one proc to fork/exec external programs
+   #. one proc to ONLY do wifi scan and joins
+   #. one proc to listen to commands from ``ifscanctl``
+
+  Scanning and fork/exec both need root privs. 3) above doesn't in
+  theory need root privs. What does this complexity buy us?
+
 * ``ifscand`` doesn't know when the host wakes up from sleep (zzz, ZZZ).
   If it had a way to know of this from the kernel, it can scan
   immediately upon wakeup from sleep.

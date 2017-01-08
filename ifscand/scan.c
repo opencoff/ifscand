@@ -51,6 +51,7 @@ static void start_dhcp(ifstate *ifs);
 static void stop_dhcp(void);
 static void cleanup_state(ifstate *ifs);
 static void reopen_std_fds(void);
+static int connect_ap(ifstate *s, const apdata *ap);
 
 /*
  * Measure RSSI and compare against previous values to determine if
@@ -175,8 +176,9 @@ check_rssi(ifstate *ifs)
 
     int r = ifstate_get_rssi(ifs, cur->apname, cur->nr_bssid);
     if (r < 0) {
-        printlog(LOG_ERR, "%s: can't measure rssi of '%s': %s",
-                ifs->ifname, cur->apname, strerror(-r));
+        uint8_t *m = cur->nr_bssid;
+        printlog(LOG_ERR, "%s: can't measure rssi of '%s' (" MACFMT "): %s",
+                ifs->ifname, cur->apname, sMAC(m), strerror(-r));
         return r;
     }
 
@@ -326,6 +328,9 @@ ifconfig_up(ifstate *s, const apdata *ap)
 
 /*
  * Return true if successful, false otherwise.
+ *
+ * XXX do a SIOCG80211NODE to see which BSSID the kernel driver
+ * connected to..
  */
 static int
 connect_ap(ifstate *s, const apdata *ap)
@@ -338,6 +343,11 @@ connect_ap(ifstate *s, const apdata *ap)
         printlog(LOG_INFO, "can't configure interface for AP '%s': %s",
                     ap->apname, strerror(-r));
         return 0;
+    }
+
+    if (!Network_cfg) {
+        debuglog("Skipping network configuration ..");
+        return 1;
     }
 
     if (!(ap->flags & (AP_IN4|AP_IN6))) {
@@ -354,22 +364,25 @@ connect_ap(ifstate *s, const apdata *ap)
  * Disconnect from 'ap'.
  */
 int
-disconnect_ap(ifstate *s, const apdata *ap)
+disconnect_ap(ifstate *s, apdata *ap)
 {
-    if (strlen(ap->apname) > 0) {
-        printlog(LOG_INFO, "disconnecting from AP \"%s\"", ap->apname);
+    if (0 == strlen(ap->apname)) return 1;
 
-        ifstate_unconfig(s);
+    printlog(LOG_INFO, "disconnecting from AP \"%s\"", ap->apname);
 
+    ifstate_unconfig(s);
+
+    if (Network_cfg) {
         if (!(ap->flags & (AP_IN4|AP_IN6))) {
             stop_dhcp();
         }
-
-        /*
-         * Bring down the interface. This also clears the routes.
-         */
-        ifstate_set(s, 0);
     }
+
+    /*
+     * Bring down the interface. This also clears the routes.
+     */
+    ifstate_set(s, 0);
+    memset(ap, 0, sizeof ap);
     return 1;
 }
 

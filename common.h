@@ -71,8 +71,8 @@ struct apdata
     char apname[AP_NAMELEN];
     char key[AP_KEYLEN];
 
-    uint8_t apmac[6];
-    uint8_t mymac[6];
+    uint8_t apmac[6];   // pinned MAC addr
+    uint8_t mymac[6];   // station MAC addr
     uint16_t keytype;   // One of AP_KEY_XXX above
 
     struct in_addr in4;
