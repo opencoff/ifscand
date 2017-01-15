@@ -27,8 +27,8 @@ and auto-configure.
 
 Where *command* can be one of::
 
-    add AP [with BSSID] [using wep|wpa] [key KEY] [mac MACADDR] \
-        [inet IP4/MASK4] [gw GW4] [inet6 IP6/MASK6] [gw6 GW6]
+    add nwid AP [bssid BSSID] [wpakey|nwkey KEY] [lladdr MACADDR] \
+        [inet dhcp|IP4/MASK4] [gw GW4] [inet6 IP6/MASK6] [gw6 GW6]
 
     del AP
 
@@ -134,11 +134,12 @@ Show me some examples
 Let us assume your WiFi interface is **iwm0** and you have an AP
 with SSID "myap" and WPA key "origami987".  As 'root' do::
 
-    # ./ifscanctl/ifscanctl iwm0 add myap using wpa key origami987
+ # ./ifscanctl/ifscanctl iwm0 add nwid myap wpakey origami987 inet dhcp
+ # ./ifscanctl/ifscanctl iwm0 add nwid "Google Starbucks" inet dhcp
+ # ./ifscanctl/ifscanctl iwm0 add nwid SomeAP wpakey foobar12345
 
-Now, we have taught ``ifscand`` to scan on iwm0 for "myapp".
-When it finds this AP, it will join it and configure an IP address
-via DHCP.
+The last example remembers ``SomeAP`` - but **without** any network
+address (IP) configuration.
 
 For more details, consult the man page for ``ifscanctl``.
 
@@ -175,7 +176,8 @@ How can I prevent leak of my MAC address to some APs
 In the example above, let us tell ``ifscand`` to use a random MAC
 address with "myap"::
 
-    # ./ifscanctl/ifscanctl iwm0 add myap using wpa key origami987 mac random
+    # ./ifscanctl/ifscanctl iwm0 add nwid myap wpakey origami987 \
+        lladdr random inet dhcp
 
 Now, ``ifscand`` will pick a random MAC address whenever it joins
 "myap".
@@ -187,8 +189,8 @@ can think of) that it is the right one. Once certain, you can teach
 ``ifscand`` to pin the AP name to its BSSID. e.g., let us connect to
 "secureAP" with a pinned BSSID::
 
-    # ifscanctl iwm0 add secureAP with 60:00:0a:13:22:5a using wpa \
-        key histeriana7139
+    # ifscanctl iwm0 add nwid secureAP bssid 60:00:0a:13:22:5a \
+        wpakey histeriana7139 inet dhcp
 
 Now, whenever ``ifscand`` sees the AP "secureAP", it will verify that
 it's BSSID is *60:00:0a:13:22:5a*. If it isn't - it will write a
@@ -235,8 +237,11 @@ Developer Notes
     - scan.c: Logic to scan for WiFi AP and maintenance post-joining.
 
 
-TODO
-====
+BUGS, TODO
+==========
+* Sporadic disconnects on iwm(4) when ``ifscand`` runs. I haven't
+  had time to chase this down.
+
 * privilege separation, pledge(2) of ``ifscand``:
 
    #. one proc to fork/exec external programs

@@ -369,7 +369,6 @@ extern int cmd_process(cmd_state *s);
  */
 extern int Debug;       // set if running in debug mode
 extern int Foreground;  // set if NOT running as daemon
-extern int Network_cfg; // set if ifscand does network layer config
 
 #ifdef __cplusplus
 }

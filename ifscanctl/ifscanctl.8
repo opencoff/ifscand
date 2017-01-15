@@ -50,44 +50,42 @@ daemon.
 .Pp
 The following commands are available:
 .Bl -tag -width Ds
-.It Cm add AP
+.It Cm add nwid APNAME
 .Oo
-.Op Ar with BSSID
-.Op Ar using KEYTYPE
-.Op Ar key KEY
-.Op Ar mac MACADDR
-.Op Ar inet IP/MASK
+.Op Ar bssid BSSID
+.Oo
+.Op Ar wpakey WPAKEY
+.Op Ar nwkey  WEPKEY
+.Oc
+.Op Ar lladdr MACADDR
+.Op Ar inet dhcp|IP4/MASK
 .Op Ar gw  GATEWAY
 .Op Ar inet6 IP/MASK
 .Op Ar gw6 GATEWAY
 .Oc
 .Pp
-Remember access point named "AP". The only mandatory argument
-is "AP". Optional keywords configure various elements of the
+Remember access point named "APNAME". The only mandatory keyword and argument
+is "nwid". Optional keywords configure various elements of the
 association:
 .Pp
 .Bl -tag -width "inet6 IP6/MASK6" -compact
-.It with BSSID
-The "with" keyword pins a specific BSSID to the access
-point "AP". The BSSID should be specified as six colon separated
+.It bssid BSSID
+Pins a specific BSSID to the access
+point "APNAME". The BSSID should be specified as six colon separated
 hex values (e.g., 60:00:0a:18:2b:5c).
 .Pp
-.It using KEYTYPE
-The "using" keyword specifies a keytype. Valid values for
-KEYTYPE are "wep" and "wpa".
+.It wpakey KEY
+Specifies the WPA key KEY for joining with "APNAME".
 .Pp
-.It key KEY
-The "key" keyword provides a shared secret key for joining with
-"AP". The key can be a string (WEP or WPA) or of the form
+.It nwkey KEY
+Specifies a WEP key for joining with "APNAME". 
+The key is a string key or of the form
 ``n:k1,k2,k3,k4'' where `n' specifies which of the keys will be used
 for transmitted packets, and the four keys - ``k1'' through ``k4''
 are configured as WEP keys. The length of WEP keys must be 40 bits
 for 64-bit encryption and 104 bits for 128-bit encryption.
 .Pp
-It is an error to use the "key" keyword without a corresponding
-"keytype" keyword and vice-versa.
-.Pp
-.It mac MAC
+.It lladdr MAC
 The "mac" keyword configures the host (station) MAC address while
 joining to access point "AP". If MAC is the special value "random",
 then
@@ -99,10 +97,14 @@ output for the interface in question. While the "mac" keyword is optional
 we recommend using the "random" option whenever possible. It
 preserves user privacy (makes tracking hard).
 .Pp
-.It inet IP/MASK
-The "inet" keyword configures a static IPv4 address and netmask. The
-mask can be dotted-quad or CIDR format. e.g., both of the following
-are valid:
+.It inet dhcp|IP/MASK
+The "inet" keyword specifies a IPv4 network address configuration.
+If the argument is the keyword "dhcp", then the IPv4 address is obtained
+dynamically by starting an instance of 
+.Xr dhclient 8 .
+If the argument is NOT "dhcp", then it must be a valid IPv4 address and
+MASK combination. The mask can be dotted-quad or CIDR format. e.g.,
+both of the following are valid:
 .Pp
 .D1 192.168.11.20/255.255.255.0
 .D1 192.168.11.20/24
@@ -120,12 +122,8 @@ optional.
 .Pp
 .El
 .Pp
-If neither "inet" or "inet6" are specified, the default is to use
-DHCP for obtaining an address for the interface. In this case, 
-.Xr ifscand 8
-starts and stops
-.Xr dhclient 8
-as needed to fetch the dynamic IP address for the interface.
+If neither "inet" or "inet6" are specified, the default is to NOT configure
+any network address.
 .Pp
 .It Cm del AP
 Forget access point "AP".
@@ -151,23 +149,24 @@ Display all settings or a specific setting.
 .Pp
 .Sh EXAMPLES
 Add an access point with network id "home5G" and WPA password
-"frungulate":
+"frungulate" and get IPv4 address using DHCP:
 .Pp
-.Dl $ ifscanctl iwm0 add home5G using wpa key frungulate
+.Dl $ ifscanctl iwm0 add nwid home5G wpakey frungulate inet dhcp
 .Pp
 Add an access point with network id "FreeWireless", no password and
-randomized host MAC address:
+randomized host MAC address and NO configured IP address:
 .Pp
-.Dl $ ifscanctl iwm0 add FreeWireless mac random
+.Dl $ ifscanctl iwm0 add nwid FreeWireless lladdr random
 .Pp
 Add an access point with network id "SecureWork" and WPA password
-"officiatus" and BSSID pinned to 57:00:1a:33:2f:bc:
+"officiatus" and BSSID pinned to 57:00:1a:33:2f:bc and a DHCP IPv4 
+address:
 .Pp
-.Dl $ ifscanctl iwm0 add SecureWork with 57:00:1a:33:2f:bc using wpa key officiatus
+.Dl $ ifscanctl iwm0 add nwid SecureWork bssid 57:00:1a:33:2f:bc wpakey officiatus
 .Pp
 Add a 4G hotspot with network id "Pixelnet" and WPA password
 "unwirednet" and make it override any other visible access point:
-.Dl $ ifscanctl iwm0 add PixelNet using wpa key unwirednet
+.Dl $ ifscanctl iwm0 add nwid PixelNet wpakey unwirednet
 .Dl $ ifscanctl iwm0 add ap-order PixelNet
 .Sh FILES
 .Bl -tag -width "/var/ifscand/prefs.db" -compact

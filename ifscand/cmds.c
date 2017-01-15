@@ -93,24 +93,28 @@ static const cmdpair Commands[] = {
 /*
  * "add" keyword parsers.
  */
-static int parse_apmac(apdata *d, char*val);
-static int parse_mymac(apdata *d, char*val);
-static int parse_key(apdata *d, char*val);
-static int parse_keytype(apdata *d, char*val);
-static int parse_in4mask(apdata *d, char*val);
-static int parse_in6mask(apdata *d, char*val);
-static int parse_gw4(apdata *d, char*val);
-static int parse_gw6(apdata *d, char*val);
+static int parse_apmac(apdata *d, char *val);
+static int parse_mymac(apdata *d, char *val);
+static int parse_in4mask(apdata *d, char *val);
+static int parse_in6mask(apdata *d, char *val);
+static int parse_gw4(apdata *d, char *val);
+static int parse_gw6(apdata *d, char *val);
 
-static const kwpair Keywords[] = {
-      {"with",  parse_apmac}
-    , {"mac",   parse_mymac}
-    , {"key",   parse_key}
-    , {"using", parse_keytype}
-    , {"inet",  parse_in4mask}
-    , {"inet6", parse_in6mask}
-    , {"gw",    parse_gw4}
-    , {"gw6",   parse_gw6}
+static int parse_wpakey(apdata *d, char *val);
+static int parse_wepkey(apdata *d, char *val);
+static int parse_nwid(apdata *d, char *val);
+
+
+static const kwpair Add_kw[] = {
+      {"nwid",      parse_nwid}
+    , {"lladdr",    parse_mymac}
+    , {"wpakey",    parse_wpakey}
+    , {"nwkey",     parse_wepkey}
+    , {"bssid",     parse_apmac}
+    , {"inet",      parse_in4mask}
+    , {"inet6",     parse_in6mask}
+    , {"gw",        parse_gw4}
+    , {"gw6",       parse_gw6}
     , {0, 0}
 };
 
@@ -174,6 +178,11 @@ parse_mac(unsigned char *dest, char *s)
 static int
 parse_in4mask(apdata *d, char *s)
 {
+    if (0 == strcmp(s, "dhcp")) {
+        d->flags |= AP_IN4DHCP;
+        return 1;
+    }
+
     char *mask = strchr(s, '/');
     if (mask) {
         *mask = 0;
@@ -257,7 +266,7 @@ static int
 parse_apmac(apdata *d, char *s)
 {
     if (parse_mac(d->apmac, s)) {
-        d->flags |= AP_MAC;
+        d->flags |= AP_BSSID;
         return 1;
     }
     return 0;
@@ -279,32 +288,37 @@ parse_mymac(apdata *d, char *s)
     return 0;
 }
 
+
 static int
-parse_key(apdata *d, char *s)
+parse_wpakey(apdata *d, char *s)
 {
     strlcpy(d->key, s, sizeof d->key);
-    d->flags |= AP_KEY;
+    d->flags |= AP_WPAKEY;
     return 1;
 }
 
 static int
-parse_keytype(apdata *d, char *s)
+parse_wepkey(apdata *d, char *s)
 {
-    if (0 == strcmp("wpa", s)  || 0 == strcmp("wpa2", s)) {
-        d->flags |= AP_KEYTYPE;
-        d->keytype = AP_KEYTYPE_WPA;
-    } else if (0 == strcmp("wep", s)) {
-        d->flags |= AP_KEYTYPE;
-        d->keytype = AP_KEYTYPE_WEP;
-    } else return 0;
-
+    strlcpy(d->key, s, sizeof d->key);
+    d->flags |= AP_WEPKEY;
     return 1;
 }
+
+
+static int
+parse_nwid(apdata *d, char *s)
+{
+    strlcpy(d->apname, s, sizeof d->apname);
+    d->flags |= AP_NWID;
+    return 1;
+}
+
 
 static kwparser *
 find_parser(const char *kw)
 {
-    const kwpair *a = Keywords;
+    const kwpair *a = Add_kw;
 
     for (; a->name; a++) {
         if (0 == strcmp(kw, a->name)) return a->fp;
@@ -313,30 +327,19 @@ find_parser(const char *kw)
 }
 
 
-// 
-// add AP [with MAC] [using KEYTYPE] [key KEY] [mac MAC|random] [inet IP/NET [gw IP] [inet6 IP6/NET6 [gw6 IP6]]]
+
+// add nwid AP [lladdr MAC] [wpakey|nwkey KEY] [bssid mac] [inet dhcp|IP/MASK] [gw IP] [inet6 IP6/MASK6] [GW6 IP]
 static int
 cmd_add(cmd_state *s, char **args, int argc)
 {
     int i;
     apdata d;
-    char *ap;
-
-    memset(&d, 0, sizeof d);
 
     if (argc < 1)  return cmd_error(s, "insufficient arguments to 'add'");
-    if (argc > 16) return cmd_error(s, "too many arguments to 'add'");
-
-    ap = args[0];
-
-    args++;
-    argc--;
-
-    strlcpy(d.apname, ap, sizeof d.apname);
-
-    if (argc == 0) goto end;
+    if (argc > 12) return cmd_error(s, "too many arguments to 'add'");
     if (0 != (argc % 2)) return cmd_error(s, "incomplete arguments to 'add'");
 
+    memset(&d, 0, sizeof d);
     for (i = 0; i < argc; i += 2) {
         char *kw  = args[i];
         char *val = args[i+1];
@@ -347,19 +350,19 @@ cmd_add(cmd_state *s, char **args, int argc)
         if (!(*fp)(&d, val)) return cmd_error(s, "malformed value %s for %s in 'add'", val, kw);
     }
 
-    if ((d.flags & AP_KEY) && !(d.flags & AP_KEYTYPE))
-        return cmd_error(s, "key specified without a keytype");
+    uint32_t flags = d.flags;
 
-    if ((d.flags & AP_KEYTYPE) && !(d.flags & AP_KEY))
-        return cmd_error(s, "keytype specified without a key");
+    if (! (flags & AP_NWID)) return cmd_error(s, "missing AP name");
 
-    if ((d.flags & AP_GW4) && !(d.flags & AP_IN4))
-        return cmd_error(s, "default-gateway specified without an IP address");
+    if ( (flags & (AP_WPAKEY|AP_WEPKEY)) == (AP_WPAKEY|AP_WEPKEY))
+        return cmd_error(s, "only one of WPA or WEP is needed");
 
-    if ((d.flags & AP_GW6) && !(d.flags & AP_IN6))
-        return cmd_error(s, "default-gateway specified without an IPv6 address");
+    if ((flags & AP_GW4) && !(flags & AP_IN4))
+        return cmd_error(s, "default-gateway needs an IPv4 address/mask");
 
-end:
+    if ((flags & AP_GW6) && !(flags & AP_IN6))
+        return cmd_error(s, "default-gateway needs IPv6 address/mask");
+
     db_set_apdata(s->db, &d);
 
     cmd_response_ok(s);
@@ -426,7 +429,7 @@ end:
 static int
 cmd_scan(cmd_state *s, char **args, int argc)
 {
-    if (!s->ifs) return 1;  // politely ignore
+    assert(s->ifs);
 
     int json = 0;
 

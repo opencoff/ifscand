@@ -57,7 +57,6 @@ volatile uint32_t   Sig  = 0;
 
 int  Debug       = 0;
 int  Foreground  = 0;
-int  Network_cfg = 1;    // default
 
 static int opensock(const char *fn);
 static int sockready(int fd, int wr, int delay);
@@ -77,7 +76,7 @@ static const struct option Lopt[] = {
     {"no-network",  no_argument, 0, 'N'},
     {0, 0, 0, 0}
 };
-static const char Sopt[] = "hdfN";
+static const char Sopt[] = "hdf";
 
 static void
 sighandle(int sig)
@@ -102,7 +101,6 @@ usage()
            "Options:\n"
            "  --debug, -d       Run in debug mode (extra logs)\n"
            "  --foreground, -f  Don't daemonize into the background\n"
-           "  --no-network, -N  Don't do any network configuration\n"
            "  --help, -h        Show this help message and quit\n",
            program_name, program_name);
 
@@ -118,7 +116,7 @@ main(int argc, const char* argv[])
 
     program_name = argv[0];
 
-    while ((c = getopt_long(argc, argv, Sopt, Lopt, 0)) != EOF) {
+    while ((c = getopt_long(argc, &argv[0], Sopt, Lopt, 0)) != EOF) {
         switch (c) {
             case 0:
                 break;
@@ -134,10 +132,6 @@ main(int argc, const char* argv[])
 
             case 'f':
                 Foreground = 1;
-                break;
-
-            case 'N':
-                Network_cfg = 0;
                 break;
         }
     }
@@ -178,8 +172,7 @@ main(int argc, const char* argv[])
     //     to open /dev/null etc.
     //if (pledge("stdio rpath ioctl") < 0) error(1, errno, "can't pledge");
 
-    printlog(LOG_INFO, "starting daemon for %s %s network-config..", ifname,
-                Network_cfg ? "with" : "WITHOUT");
+    printlog(LOG_INFO, "starting daemon for %s..", ifname);
     printlog(LOG_INFO, "Listening on %s, prefs in %s.db", sockfile, IFSCAND_PREFS);
 
 
@@ -246,6 +239,7 @@ main(int argc, const char* argv[])
         printlog(LOG_INFO, "Ending daemon for %s..", ifname);
 
     close(fd);
+    ifstate_unconfig(&ifs);
     disconnect_ap(&ifs, &ifs.curap);
     ifstate_close(&ifs);
     db_close(&db);

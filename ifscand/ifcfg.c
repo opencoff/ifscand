@@ -33,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include <assert.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -48,7 +48,7 @@
 
 static int setnwid(ifstate *ifs, const char *nwid);
 static int setwepkey(ifstate *ifs, const char *inval, int nokey);
-static int setwpakey(ifstate *ifs, const apdata *);
+static int setwpakey(ifstate *ifs, const char *key, const char *apname, int nokey);
 static int setmacaddr(ifstate *ifs, const uint8_t *mac, int rand);
 static int splitstr(char **v, int nv, char *str, int tok);
 
@@ -108,9 +108,12 @@ ifstate_init(ifstate *ifs, const char* ifname)
 int
 ifstate_set(ifstate *ifs, int up)
 {
-    struct ifreq nn = ifs->ifr;
+    struct ifreq nn;
 
+    memset(&nn, 0, sizeof nn);
     strlcpy(nn.ifr_name, ifs->ifname, sizeof nn.ifr_name);
+
+    if (ioctl(ifs->scanfd, SIOCGIFFLAGS, (caddr_t)&nn) < 0) return -errno;
 
     if (up)
         nn.ifr_flags |= IFF_UP;
@@ -175,7 +178,7 @@ ifstate_scan(ifstate *ifs)
 
     na.na_node = nr;
     na.na_size = sizeof nr;
-    strlcpy(na.na_ifname, ifs->ifr.ifr_name, sizeof na.na_ifname);
+    strlcpy(na.na_ifname, ifs->ifname, sizeof na.na_ifname);
 
     if (ioctl(ifs->scanfd, SIOCG80211ALLNODES, &na) != 0) return -errno;
 
@@ -333,14 +336,10 @@ ifstate_config(ifstate *ifs, const apdata *ap, apdata *newap)
     r = setnwid(ifs, ap->apname);
     if (r < 0) return r;
 
-    if (ap->flags & AP_KEY) {
-        if (ap->keytype == AP_KEYTYPE_WEP)
-            r = setwepkey(ifs, ap->key, 0);
-        else if (ap->keytype == AP_KEYTYPE_WPA)
-            r = setwpakey(ifs, ap);
-        else
-            printlog(LOG_WARNING, "AP %s: AP_KEY is set; but no keytype??", ap->apname);
-    }
+    if (ap->flags & AP_WEPKEY)
+        r = setwepkey(ifs, ap->key, 0);
+    else if (ap->flags & AP_WPAKEY)
+        r = setwpakey(ifs, ap->key, ap->apname, 0);
 
     if (r < 0) return r;
 
@@ -385,6 +384,7 @@ ifstate_unconfig(ifstate *ifs)
 {
     setnwid(ifs, 0);
     setwepkey(ifs, "", 0);
+    setwpakey(ifs, "", "", 1);
     return 0;
 }
 
@@ -406,7 +406,9 @@ setnwid(ifstate *ifs, const char *id)
         nwid.i_len = strlen(nwid.i_nwid);
     }
 
-    struct ifreq ifr = ifs->ifr;
+    struct ifreq ifr;
+
+    strlcpy(ifr.ifr_name, ifs->ifname, sizeof ifr.ifr_name);
     ifr.ifr_data     = (caddr_t)&nwid;
 
     if (ioctl(ifs->scanfd, SIOCS80211NWID, (caddr_t)&ifr) < 0) return -errno;
@@ -506,16 +508,15 @@ setwepkey(ifstate *ifs, const char *inval, int nokey)
  * Return 0 on success, -errno on failure
  */
 static int
-setwpakey(ifstate *ifs, const apdata *ap)
+setwpakey(ifstate *ifs, const char *val, const char *apname, int nokey)
 {
-    const char *val = ap->key;
     struct ieee80211_wpaparams wpa;
     struct ieee80211_wpapsk psk;
     int passlen;
     int r;
 
     memset(&psk, 0, sizeof(psk));
-    if (ap->flags & AP_KEY) {
+    if (!nokey) {
         if (val[0] == '0' && (val[1] == 'x' || val[1] == 'X')) {
             r = str2hex(psk.i_psk, sizeof psk.i_psk, val+2);
             if (r < 0) return r;
@@ -524,7 +525,7 @@ setwpakey(ifstate *ifs, const apdata *ap)
             /* Parse a WPA passphrase */ 
             passlen = strlen(val);
             if (passlen < 8 || passlen > 63) return -E2BIG;
-            if (pkcs5_pbkdf2(val, passlen, ap->apname, strlen(ap->apname),
+            if (pkcs5_pbkdf2(val, passlen, apname, strlen(apname),
                         psk.i_psk, sizeof(psk.i_psk), 4096) != 0)
                 return -EINVAL; // XXX ??
         }
@@ -564,9 +565,11 @@ setmacaddr(ifstate *ifs, const uint8_t *mac, int randmac)
     };
 #define NPREF   ((sizeof prefix) / (sizeof prefix[0]))
 
-    struct ifreq *ifr = &ifs->ifr;
+    struct ifreq z;
+    struct ifreq *ifr = &z;
     uint8_t *addr     = ifr->ifr_addr.sa_data;
 
+    strlcpy(ifr->ifr_name, ifs->ifname, sizeof ifr->ifr_name);
     ifr->ifr_addr.sa_len    = 6;
     ifr->ifr_addr.sa_family = AF_LINK;
 
@@ -597,16 +600,18 @@ static int
 wait_config(ifstate *ifs, apdata *z)
 {
     struct ieee80211_nwid n;
-    struct ifreq *ifr = &ifs->ifr;
+    struct ifreq ii;
     int r;
 
     if ((r = wait_media(ifs)) < 0)   return r;
 
     memset(&n, 0, sizeof n);
+    memset(&ii, 0, sizeof ii);
 
-    ifr->ifr_data = (caddr_t)&n;
+    strlcpy(ii.ifr_name, ifs->ifname, sizeof ii.ifr_name);
+    ii.ifr_data = (caddr_t)&n;
 
-    if (ioctl(ifs->scanfd, SIOCG80211NWID, ifr) < 0) return -errno;
+    if (ioctl(ifs->scanfd, SIOCG80211NWID, &ii) < 0) return -errno;
     strlcpy(z->apname, n.i_nwid, sizeof z->apname);
 
     if ((r = wait_bssid(ifs, z->nr_bssid)) < 0) return r;
@@ -633,17 +638,18 @@ wait_config(ifstate *ifs, apdata *z)
 static int
 wait_up(ifstate *ifs)
 {
-    struct ifreq z    = ifs->ifr;
-    struct ifreq *ifr = &z;
+    struct ifreq z ;
     int tries = 0;
 
-    ifr->ifr_flags |= IFF_UP;
-    if (ioctl(ifs->scanfd, SIOCSIFFLAGS, ifr) < 0) return -errno;
+    memset(&z, 0, sizeof z);
+    strlcpy(z.ifr_name, ifs->ifname, sizeof z.ifr_name);
+
+    ifstate_set(ifs, 1);
 
     for (tries = 0; tries < 5; tries++) {
-        if (ioctl(ifs->scanfd, SIOCGIFFLAGS, ifr) < 0) return -errno;
+        if (ioctl(ifs->scanfd, SIOCGIFFLAGS, &z) < 0) return -errno;
 
-        if ( (IFF_UP|IFF_RUNNING) == ((IFF_UP|IFF_RUNNING) & ifr->ifr_flags)) {
+        if ( (IFF_UP|IFF_RUNNING) == ((IFF_UP|IFF_RUNNING) & z.ifr_flags)) {
             debuglog("interface is up after %u ms", tries * IFUP_WAIT_MS);
             return 1;
         }

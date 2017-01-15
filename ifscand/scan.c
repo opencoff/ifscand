@@ -96,7 +96,7 @@ wifi_scan(ifstate *ifs)
         apdata *ap = &ifs->curap;
 
         // Verify DHCP is running
-        if (Network_cfg && !(ap->flags & (AP_IN4|AP_IN6))) {
+        if (ap->flags & AP_IN4DHCP) {
             check_dhcp(ifs);
         }
 
@@ -355,22 +355,15 @@ connect_ap(ifstate *s, const apdata *ap)
         return 0;
     }
 
-    if (!Network_cfg) {
-        debuglog("Skipping network configuration ..");
-        return 1;
-    }
-
-    if (!(ap->flags & (AP_IN4|AP_IN6))) {
+    if (ap->flags & AP_IN4DHCP) {
         start_dhcp(s);
         return 1;
     }
 
-    ifconfig_up(s, ap);
+    if ((ap->flags & (AP_IN4|AP_IN6))) {
+        ifconfig_up(s, ap);
+    }
 
-    /*
-     * Set up s->curap with the right BSSID etc. of whatever node we
-     * joined.
-     */
     return 1;
 }
 
@@ -387,16 +380,12 @@ disconnect_ap(ifstate *s, apdata *ap)
 
     ifstate_unconfig(s);
 
-    if (Network_cfg) {
-        if (!(ap->flags & (AP_IN4|AP_IN6))) {
-            stop_dhcp();
-        }
+    if (ap->flags & AP_IN4DHCP) {
+        stop_dhcp();
+    } else if ((ap->flags & (AP_IN4|AP_IN6))) {
+        ifstate_set(s, 0);
     }
 
-    /*
-     * Bring down the interface. This also clears the routes.
-     */
-    ifstate_set(s, 0);
     memset(ap, 0, sizeof ap);
     return 1;
 }
@@ -412,8 +401,7 @@ start_dhcp(ifstate *ifs)
     /* Lets try HUP'ing it */
     if (Dhpid > 0) {
         debuglog("Restarting (SIGHUP) existing dhclient %d..", Dhpid);
-        kill(Dhpid, SIGHUP);
-        return;
+        kill(Dhpid, SIGINT);
     }
 
     const char *exe =  "/sbin/dhclient";

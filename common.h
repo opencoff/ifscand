@@ -36,8 +36,8 @@ extern "C" {
 /*
  * BitFlags used in 'apdata' below.
  */
-#define AP_MAC      (1 << 0)
-#define AP_KEY      (1 << 1)
+#define AP_BSSID    (1 << 0)
+#define AP_NWID     (1 << 1)
 
 /*
  * MYMAC is set if the non-default MAC address is set for a given
@@ -50,14 +50,11 @@ extern "C" {
 #define AP_GW4      (1 << 5)
 #define AP_IN6      (1 << 6)
 #define AP_GW6      (1 << 7)
-#define AP_KEYTYPE  (1 << 8)
+#define AP_WPAKEY   (1 << 8)
+#define AP_WEPKEY   (1 << 9)
+#define AP_IN4DHCP  (1 << 10)
 
 
-/*
- * Supported key types
- */
-#define AP_KEYTYPE_WEP      1
-#define AP_KEYTYPE_WPA      2
 
 /*
  * information about a particular AP and the user's preference. This
@@ -73,7 +70,6 @@ struct apdata
 
     uint8_t apmac[6];   // pinned MAC addr
     uint8_t mymac[6];   // station MAC addr
-    uint16_t keytype;   // One of AP_KEY_XXX above
 
     struct in_addr in4;
     struct in_addr mask4;

@@ -251,7 +251,7 @@ db_filter_ap(apdb *db, apvect *av, nodevect *nv)
          * If the MAC address is pinned, make sure what we are
          * seeing is the same as what we expect.
          */
-        if (d.flags & AP_MAC) {
+        if (d.flags & AP_BSSID) {
             if (0 != memcmp(d.apmac, nr->nr_bssid, 6)) {
                 char exp[16];
                 char saw[16];
@@ -451,68 +451,63 @@ size_t
 db_ap_sprintf(char *buf, size_t bsiz, apdata *a)
 {
     size_t orig = bsiz;
-    snprintf(buf, bsiz, "\"%s\"", a->apname);
+    snprintf(buf, bsiz, "nwid \"%s\"", a->apname);
 
     ssize_t n = strlen(buf);
     buf  += n;
     bsiz -= n;
 
-    if (a->flags & AP_MAC) {
-        uint8_t *m = &a->apmac[0];
-        snprintf(buf, bsiz, " with " MACFMT, sMAC(m));
+    if (a->flags & AP_MYMAC) {
+        if (a->flags & AP_RANDMAC) {
+            snprintf(buf, bsiz, " lladdr random");
+        } else {
+            uint8_t *m = &a->mymac[0];
+            snprintf(buf, bsiz, " lladdr " MACFMT, sMAC(m));
+        }
         n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }
 
-    if (a->keytype > 0) {
-        switch (a->keytype) {
-            default:
-                snprintf(buf, bsiz, " using %d", a->keytype);
-                break;
 
-            case AP_KEYTYPE_WPA: 
-                snprintf(buf, bsiz, " using wpa");
-                break;
-            case AP_KEYTYPE_WEP: 
-                snprintf(buf, bsiz, " using wep");
-                break;
-        }
+    if (a->flags & AP_BSSID) {
+        uint8_t *m = &a->apmac[0];
+        snprintf(buf, bsiz, " bssid " MACFMT, sMAC(m));
         n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }
 
     // XXX Do we show the key or not?
-    if (a->flags & AP_KEY) {
-        snprintf(buf, bsiz, " key \"%s\"", a->key);
+    if (a->flags & AP_WPAKEY) {
+        snprintf(buf, bsiz, " using \"%s\"", a->key);
+        n = strlen(buf);
+        buf  += n;
+        bsiz -= n;
+    } else if (a->flags & AP_WEPKEY) {
+        snprintf(buf, bsiz, " nwkey \"%s\"", a->key);
         n = strlen(buf);
         buf  += n;
         bsiz -= n;
     }
 
-    if (a->flags & AP_MYMAC) {
-        if (a->flags & AP_RANDMAC) {
-            snprintf(buf, bsiz, " mac random");
+    if (a->flags & (AP_IN4|AP_IN4DHCP)) {
+        if (a->flags & AP_IN4DHCP) {
+            snprintf(buf, bsiz, " inet dhcp");
+            n = strlen(buf);
+            buf  += n;
+            bsiz -= n;
         } else {
-            uint8_t *m = &a->mymac[0];
-            snprintf(buf, bsiz, " mac " MACFMT, sMAC(m));
+            n = fmt_ipmask(buf, bsiz, " inet %s/%s", AF_INET, &a->in4, &a->mask4);
+            buf  += n;
+            bsiz -= n;
+
+            if (a->flags & AP_GW4) {
+                n = fmt_ip(buf, bsiz, " gw %s", AF_INET, &a->gw4);
+                buf  += n;
+                bsiz -= n;
+            }
         }
-        n = strlen(buf);
-        buf  += n;
-        bsiz -= n;
-    }
-
-    if (a->flags & AP_IN4) {
-        n = fmt_ipmask(buf, bsiz, " inet %s/%s", AF_INET, &a->in4, &a->mask4);
-        buf  += n;
-        bsiz -= n;
-    }
-
-    if (a->flags & AP_GW4) {
-        n = fmt_ip(buf, bsiz, " gw %s", AF_INET, &a->gw4);
-        buf  += n;
-        bsiz -= n;
     }
 
     if (a->flags & AP_IN6) {
