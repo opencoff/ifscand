@@ -52,6 +52,12 @@ static int setwpakey(ifstate *ifs, const apdata *);
 static int setmacaddr(ifstate *ifs, const uint8_t *mac, int rand);
 static int splitstr(char **v, int nv, char *str, int tok);
 
+static int wait_config(ifstate *ifs, apdata *z);
+static int wait_up(ifstate *);
+static int wait_media(ifstate *);
+static int wait_bssid(ifstate *, uint8_t *bssid);
+static int get_rssi(ifstate *s, const char *apname, const uint8_t *mac, struct ieee80211_nodereq *nr);
+
 
 /*
  * Initialize a wifi interface for scanning. Bring it up as needed.
@@ -86,7 +92,7 @@ ifstate_init(ifstate *ifs, const char* ifname)
     }
 
     /* Make sure we have permission to scan */
-    if (ioctl(ifs->scanfd, SIOCS80211SCAN, (caddr_t)ifs) != 0) return -errno;
+    if (ioctl(ifs->scanfd, SIOCS80211SCAN, (caddr_t)ifr) != 0) return -errno;
 
     return 0;
 }
@@ -197,20 +203,11 @@ int
 ifstate_get_rssi(ifstate *ifs, const char* apname, const uint8_t *mac)
 {
     struct ieee80211_nodereq nr;
-    size_t aplen = strlen(apname);
+    int r = get_rssi(ifs, apname, mac, &nr);
 
-    memset(&nr, 0, sizeof nr);
-
-    strlcpy(nr.nr_ifname, ifs->ifname, sizeof nr.nr_ifname);
-    strlcpy(nr.nr_nwid, apname, sizeof nr.nr_nwid);
-    memcpy(nr.nr_macaddr, mac, sizeof nr.nr_macaddr);
-
-    nr.nr_nwid_len = aplen;
-
-    if (ioctl(ifs->scanfd, SIOCG80211NODE, &nr) != 0) return -errno;
-
-    return RSSI(&nr);
+    return r < 0 ? r : RSSI(&nr);
 }
+
 
 /*
  * Printable form of scanned result
@@ -307,11 +304,18 @@ ifstate_sprintf_node(char * buf, size_t  bsiz, struct ieee80211_nodereq *nr)
  * - set nwkey
  * - set status "up"
  *
- * XXX If NOT dhcp also set address.
+ * If 'newap' is non-nil, set it to the currently joined AP info
+ * (after configuration).
+ *
+ * Return:
+ *  0      on success
+ *  -errno on failure
  */
 int
-ifstate_config(ifstate *ifs, const apdata *ap)
+ifstate_config(ifstate *ifs, const apdata *ap, apdata *newap)
 {
+    struct ieee80211_nodereq nr;
+    apdata z;
     int r = 1;
 
     if (ap->flags & AP_MYMAC) {
@@ -340,7 +344,36 @@ ifstate_config(ifstate *ifs, const apdata *ap)
 
     if (r < 0) return r;
 
-    return ifstate_set(ifs, 1);
+    r = ifstate_set(ifs, 1);
+    if (r < 0) return r;
+
+    memset(&z, 0, sizeof z);
+
+    /*
+     * Finally, retrieve the current state of the interface along
+     * with the associated BSSID etc.
+     *
+     * In many cases, a single ESSID is used for 2.4G and 5G bands;
+     * and OpenBSD doesn't give an easy way to tell it which BSSID
+     * we want to associate.. the current method requires
+     * complicated media+mediaopt settings to pick a preferred band.
+     *
+     * We wait until the interface comes up and then fetch the
+     * relevant data.
+     */
+    if ((r = wait_config(ifs, &z)) < 0) return r;
+
+
+    /*
+     * Finally, fetch the latest RSSI values.
+     */
+    if ((r = get_rssi(ifs, ifs->ifname, z.nr_bssid, &nr)) < 0) return r;
+
+    z.nr_rssi     = nr.nr_rssi;
+    z.nr_max_rssi = nr.nr_max_rssi;
+
+    if (newap) *newap = z;
+    return 0;
 }
 
 
@@ -350,7 +383,9 @@ ifstate_config(ifstate *ifs, const apdata *ap)
 int
 ifstate_unconfig(ifstate *ifs)
 {
-    return setnwid(ifs, 0);
+    setnwid(ifs, 0);
+    setwepkey(ifs, "", 0);
+    return 0;
 }
 
 
@@ -545,6 +580,164 @@ setmacaddr(ifstate *ifs, const uint8_t *mac, int randmac)
 
     if (ioctl(ifs->scanfd, SIOCSIFLLADDR, (caddr_t)ifr) < 0)
         return -errno;
+
+    return 0;
+}
+
+/*
+ * Wait for interface to be up and running.
+ * - wait for chan, media to be available
+ * - then fetch bssid (SIOCG90211BSSID)
+ *
+ * Return:
+ *      0 on success
+ *      -errno on failure
+ */
+static int
+wait_config(ifstate *ifs, apdata *z)
+{
+    struct ieee80211_nwid n;
+    struct ifreq *ifr = &ifs->ifr;
+    int r;
+
+    if ((r = wait_media(ifs)) < 0)   return r;
+
+    memset(&n, 0, sizeof n);
+
+    ifr->ifr_data = (caddr_t)&n;
+
+    if (ioctl(ifs->scanfd, SIOCG80211NWID, ifr) < 0) return -errno;
+    strlcpy(z->apname, n.i_nwid, sizeof z->apname);
+
+    if ((r = wait_bssid(ifs, z->nr_bssid)) < 0) return r;
+
+    if ((r = wait_up(ifs))    < 0)   return r;
+
+    printlog(LOG_INFO, "Connected to AP \"%s\" with BSSID " MACFMT, z->apname, sMAC(z->nr_bssid));
+    return 0;
+}
+
+
+#define IFUP_WAIT_MS    100
+#define MEDIA_WAIT_MS   500
+#define BSSID_WAIT_MS   150
+
+
+/*
+ * Wait until interface is truly up.
+ *
+ * Return:
+ *      0 on success
+ *      -errno on failure
+ */
+static int
+wait_up(ifstate *ifs)
+{
+    struct ifreq z    = ifs->ifr;
+    struct ifreq *ifr = &z;
+    int tries = 0;
+
+    ifr->ifr_flags |= IFF_UP;
+    if (ioctl(ifs->scanfd, SIOCSIFFLAGS, ifr) < 0) return -errno;
+
+    for (tries = 0; tries < 5; tries++) {
+        if (ioctl(ifs->scanfd, SIOCGIFFLAGS, ifr) < 0) return -errno;
+
+        if ( (IFF_UP|IFF_RUNNING) == ((IFF_UP|IFF_RUNNING) & ifr->ifr_flags)) {
+            debuglog("interface is up after %u ms", tries * IFUP_WAIT_MS);
+            return 1;
+        }
+
+        // wait for .5 seconds before trying again
+        usleep(IFUP_WAIT_MS * 1000);
+    }
+    return -ENETDOWN;
+}
+
+
+/*
+ * Wait for media to be configured.
+ *
+ * Return:
+ *      0 on success
+ *      -errno on failure
+ */
+static int
+wait_media(ifstate *ifs)
+{
+    struct ifmediareq mr;
+    int tries;
+
+    memset(&mr, 0, sizeof mr);
+    strlcpy(mr.ifm_name, ifs->ifname, sizeof mr.ifm_name);
+
+    for (tries = 0; tries < 5; tries++) {
+        if (ioctl(ifs->scanfd, SIOCGIFMEDIA, &mr) < 0) return -errno;
+        if (mr.ifm_count > 0) {
+            debuglog("media configured after %u ms", tries * MEDIA_WAIT_MS);
+            return 1;
+        }
+        usleep(MEDIA_WAIT_MS * 1000);
+    }
+    return -ENETDOWN;
+}
+
+
+/*
+ * Wait for BSSID to be available
+ *
+ * Return:
+ *      0 on success
+ *      -errno on failure
+ */
+static int
+wait_bssid(ifstate *ifs, uint8_t *bssid)
+{
+    static const uint8_t Zeroes[] = { 0,0,0, 0,0,0 };
+    struct ieee80211_bssid b;
+    int tries;
+
+    memset(&b, 0, sizeof b);
+    strlcpy(b.i_name, ifs->ifname, sizeof b.i_name);
+
+    for (tries = 0; tries < 50; tries++) {
+        if (ioctl(ifs->scanfd, SIOCG80211BSSID, &b) < 0) return -errno;
+
+        if (0 != memcmp(b.i_bssid, Zeroes, 6)) {
+            debuglog("bssid is avail after %u ms", tries * BSSID_WAIT_MS);
+
+            memcpy(bssid, b.i_bssid, 6);
+            return 1;
+        }
+
+        // wait for .5 seconds before trying again
+        usleep(BSSID_WAIT_MS * 1000);
+    }
+    return -ENETDOWN;
+}
+
+
+/*
+ * Fill RSSI info in 'nr'.
+ *
+ * Return:
+ *   0 on success
+ *   -errno on failure
+ */
+static int
+get_rssi(ifstate *ifs, const char *apname, const uint8_t *mac, struct ieee80211_nodereq *nr)
+{
+    size_t aplen = strlen(apname);
+
+    memset(nr, 0, sizeof *nr);
+
+    strlcpy(nr->nr_ifname, ifs->ifname, sizeof nr->nr_ifname);
+    strlcpy(nr->nr_nwid,   apname,      sizeof nr->nr_nwid);
+    memcpy(nr->nr_macaddr, mac,         sizeof nr->nr_macaddr);
+
+    nr->nr_nwid_len = aplen;
+
+    if (ioctl(ifs->scanfd, SIOCG80211NODE, nr) != 0) return -errno;
 
     return 0;
 }

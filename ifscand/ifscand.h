@@ -329,7 +329,7 @@ ssize_t ifstate_sprintf_node(char * buf, size_t  bsiz, struct ieee80211_nodereq 
 int ifstate_set(ifstate *, int up);
 
 
-int ifstate_config(ifstate *, const apdata *);
+int ifstate_config(ifstate *, const apdata *, apdata *newap);
 int ifstate_unconfig(ifstate *);
 
 

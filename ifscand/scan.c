@@ -44,11 +44,10 @@
 
 #include "ifscand.h"
 
-static int connect_ap(ifstate *s, const apdata *ap);
-
 static void do_scan(ifstate *s, int low_rssi);
 static void start_dhcp(ifstate *ifs);
 static void stop_dhcp(void);
+static void check_dhcp(ifstate *);
 static void cleanup_state(ifstate *ifs);
 static void reopen_std_fds(void);
 static int connect_ap(ifstate *s, const apdata *ap);
@@ -94,6 +93,13 @@ wifi_scan(ifstate *ifs)
     int low_rssi = 0;
 
     if (ifs->associated) {
+        apdata *ap = &ifs->curap;
+
+        // Verify DHCP is running
+        if (Network_cfg && !(ap->flags & (AP_IN4|AP_IN6))) {
+            check_dhcp(ifs);
+        }
+
         r = check_rssi(ifs);
         if (r < 0 || r > 0) return r;
 
@@ -139,24 +145,25 @@ do_scan(ifstate *ifs, int low_rssi)
     apdata *d = &VECT_ELEM(&av, 0);
 
     if (ifs->associated) {
-        if (same_ap(&ifs->curap, d)) {
+        apdata *ap = &ifs->curap;
+
+        if (same_ap(ap, d)) {
             if (!low_rssi)           goto end;
             if (VECT_SIZE(&av) == 1) goto end;
 
             d = &VECT_ELEM(&av, 1);
-            debuglog("Cur AP %s: Low RSSI; picking next AP %s", ifs->curap.apname, d->apname);
+            debuglog("Cur AP %s: Low RSSI; picking next AP %s", ap->apname, d->apname);
         }
-        disconnect_ap(ifs, &ifs->curap);
+        disconnect_ap(ifs, ap);
     }
 
     r = connect_ap(ifs, d);
-    if (r >= 0) {
-        ifs->curap      = *d;
+    if (r > 0) {
         ifs->associated = 1;
         ifs->timeout    = IFSCAND_INT_RSSI_FAST;    // XXX really?
 
         rssi_avg_init(&ifs->avg);
-        rssi_avg_add_sample(&ifs->avg, RSSI(d));
+        rssi_avg_add_sample(&ifs->avg, RSSI(&ifs->curap));
     } else {
         printlog(LOG_ERR, "can't connect to AP '%s': %s", d->apname, strerror(-r));
 
@@ -222,10 +229,13 @@ run_prog(ifstate *ifs, char * const argv[], char * const env[])
 
         chdir("/tmp");
         execve(exe, argv, env);
+        printlog(LOG_ERR, "can't exec %s: %s", exe, strerror(errno));
     } else {
         // parent. Wait for child to finish.
         r = 0;
         waitpid(pid, &r, 0);
+
+        debuglog("%s: exit code %d", exe, r);
 
         if (WIFEXITED(r)) {
             int x = WEXITSTATUS(r);
@@ -338,7 +348,7 @@ connect_ap(ifstate *s, const apdata *ap)
     int r;
     printlog(LOG_INFO, "connecting to AP \"%s\"", ap->apname);
 
-    r = ifstate_config(s, ap);
+    r = ifstate_config(s, ap, &s->curap);
     if (r < 0) {
         printlog(LOG_INFO, "can't configure interface for AP '%s': %s",
                     ap->apname, strerror(-r));
@@ -356,6 +366,11 @@ connect_ap(ifstate *s, const apdata *ap)
     }
 
     ifconfig_up(s, ap);
+
+    /*
+     * Set up s->curap with the right BSSID etc. of whatever node we
+     * joined.
+     */
     return 1;
 }
 
@@ -425,6 +440,7 @@ start_dhcp(ifstate *ifs)
 
         chdir("/tmp");
         execve(exe, argv, envp);
+        printlog(LOG_ERR, "can't exec %s: %s", exe, strerror(errno));
     }
 
     debuglog("Started dhclient %s: PID %d", ifs->ifname, pid);
@@ -450,12 +466,42 @@ stop_dhcp()
 }
 
 
+static void
+check_dhcp(ifstate *s)
+{
+    if (Dhpid < 0) {
+        printlog(LOG_ERR, "dhclient pid is missing?");
+        return;
+    }
+
+    int r   = 0;
+    pid_t k = waitpid(Dhpid, &r, WNOHANG);
+
+    if (k < 0)  return;
+    if (k == 0) return; // means Dhclient is alive and well
+
+    if (k != Dhpid)
+        printlog(LOG_ERR, "expected dhclient PID to be %d, saw %d; status %d",
+                    Dhpid, k, r);
+
+    if (WIFEXITED(r)) {
+        int x = WEXITSTATUS(r);
+        if (x != 0) {
+            printlog(LOG_ERR, "dhclient exited abnormally with %d", x);
+        }
+    } else if (WIFSIGNALED(r)) {
+        int sig = WTERMSIG(r);
+        printlog(LOG_ERR, "dhclient caught signal %d and aborted", sig);
+    }
+}
+
+
 // call after fork() before exec() -- in the child.
 static void
 cleanup_state(ifstate *ifs)
 {
     closelog(); // syslog
-    ifstate_close(ifs);
+    close(ifs->scanfd);
     db_close(ifs->db);
 }
 

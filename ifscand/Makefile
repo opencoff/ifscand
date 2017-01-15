@@ -20,9 +20,9 @@ BINDIR = /usr/local/bin
 INCS = -I$(commonsrc) -I..
 
 # Comment for release builds
-#DEBUG=1
+#dbg=1
 
-.ifdef DEBUG
+.ifdef dbg
 OFLAGS = -g
 .else
 OFLAGS = -O2 -fexpensive-optimizations

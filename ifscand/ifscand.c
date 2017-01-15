@@ -193,6 +193,7 @@ main(int argc, const char* argv[])
      */
     int delay   = ifs.timeout;
     int fd      = ifs.ipcfd;
+    int errs    = 0;
     cmd_state s = { .fd = fd, .db  = &db, .ifs = &ifs };
 
     fast_buf_init(&s.in, 2048);
@@ -221,8 +222,16 @@ main(int argc, const char* argv[])
              */
         } 
 
-        wifi_scan(&ifs);
-        delay = ifs.timeout;
+#define MAXERRS 5
+        if (wifi_scan(&ifs) < 0) {
+            if (++errs >= MAXERRS) {
+                printlog(LOG_ERR, "Too many consecutive errors; aborting!");
+                break;
+            }
+        } else {
+            errs  = 0;
+            delay = ifs.timeout;
+        }
 
         /*
          * Check after we handle any commands and/or statemachine
