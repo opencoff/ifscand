@@ -369,6 +369,7 @@ extern int cmd_process(cmd_state *s);
  */
 extern int Debug;       // set if running in debug mode
 extern int Foreground;  // set if NOT running as daemon
+extern int Linklayer;   // set if skipping IPv4/IPv6 config
 
 #ifdef __cplusplus
 }

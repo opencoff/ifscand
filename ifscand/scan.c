@@ -355,6 +355,15 @@ connect_ap(ifstate *s, const apdata *ap)
         return 0;
     }
 
+    /*
+     * If we are asked to only configure link layer, we forego
+     * configuring IP Addresses
+     */
+    if (Linklayer) {
+        printlog(LOG_INFO, "skipping IP address configuration for %s..", ap->apname);
+        return 1;
+    }
+
     if (ap->flags & AP_IN4DHCP) {
         start_dhcp(s);
         return 1;

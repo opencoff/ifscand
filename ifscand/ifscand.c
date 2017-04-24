@@ -57,6 +57,7 @@ volatile uint32_t   Sig  = 0;
 
 int  Debug       = 0;
 int  Foreground  = 0;
+int  Linklayer   = 0;
 
 static int opensock(const char *fn);
 static int sockready(int fd, int wr, int delay);
@@ -76,7 +77,7 @@ static const struct option Lopt[] = {
     {"no-network",  no_argument, 0, 'N'},
     {0, 0, 0, 0}
 };
-static const char Sopt[] = "hdf";
+static const char Sopt[] = "hdfN";
 
 static void
 sighandle(int sig)
@@ -101,6 +102,7 @@ usage()
            "Options:\n"
            "  --debug, -d       Run in debug mode (extra logs)\n"
            "  --foreground, -f  Don't daemonize into the background\n"
+           "  --no-network, -N  Don't configure any IP address\n"
            "  --help, -h        Show this help message and quit\n",
            program_name, program_name);
 
@@ -109,7 +111,7 @@ usage()
 
 
 int
-main(int argc, const char* argv[])
+main(int argc, char * const* argv)
 {
     char sockfile[PATH_MAX];
     int c;
@@ -132,6 +134,9 @@ main(int argc, const char* argv[])
 
             case 'f':
                 Foreground = 1;
+                break;
+            case 'N':
+                Linklayer = 1;
                 break;
         }
     }

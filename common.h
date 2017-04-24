@@ -15,6 +15,8 @@ extern "C" {
 
 #include <stdint.h>
 #include <netinet/in.h>
+#include <sys/param.h>
+#include <sys/select.h>
 #include <net80211/ieee80211.h>
 #include <net/if.h>
 #include <net80211/ieee80211_ioctl.h>
