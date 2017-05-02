@@ -1,5 +1,4 @@
-#	$OpenBSD: Makefile,v 1.14 2016/05/03 17:52:33 jca Exp $
-
+# Makefile for ifscand
 
 commonsrc= ../lib
 .PATH: $(commonsrc)
@@ -38,9 +37,12 @@ DPADD=	${LIBUTIL}
 
 .include <bsd.prog.mk>
 
+# Not used when in ports mode
+.ifndef WRKDIST
 afterinstall:
+	@echo afterinstall running ..
 	cp ../etc/rc.d/ifscand /etc/rc.d/
 	cat ../etc/rc.conf.local >> /etc/rc.conf.local
-
+.endif
 
 $(aobjs): ifscand.h ../common.h

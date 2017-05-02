@@ -1,0 +1,9 @@
+ifscand and ifscanctl are now installed in /usr/local/
+
+If you want the daemon to start at boot:
+
+  - copy /usr/local/etc/rc.d/ifscand /etc/rc.d/
+  - append /usr/local/etc/rc.conf.local to /etc/rc.conf.local
+  - edit /etc/rc.conf.local with the interface to be watched
+
+Please refer to the manpages (ifscand(8), ifscanctl(8)) for details.
