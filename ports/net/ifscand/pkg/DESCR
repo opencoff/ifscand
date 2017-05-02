@@ -1,0 +1,3 @@
+ifscand is a daemon to automatically configured WiFi interfaces
+on OpenBSD. A companion program (ifscanctl) provides the means to
+add, delete trusted access points and their properties.
