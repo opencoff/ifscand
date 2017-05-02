@@ -37,12 +37,4 @@ DPADD=	${LIBUTIL}
 
 .include <bsd.prog.mk>
 
-# Not used when in ports mode
-.ifndef WRKDIST
-afterinstall:
-	@echo afterinstall running ..
-	cp ../etc/rc.d/ifscand /etc/rc.d/
-	cat ../etc/rc.conf.local >> /etc/rc.conf.local
-.endif
-
 $(aobjs): ifscand.h ../common.h
