@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
@@ -46,17 +47,21 @@
 
 // Handle command and send response to 'fp'
 typedef int cmd_handler_func(cmd_state *s, char **args, int argc);
+typedef void get_handler_func(apdb *db, fast_buf *out);
+
+// "add" keyword parser
+typedef int kwparser(apdata *d, char* val);
 
 // Command name -to- handler mapping
 struct cmdpair
 {
     const char *name;
-    cmd_handler_func *handler;
+    cmd_handler_func *set;
+    get_handler_func *get;
+    const char **aliases;
 };
 typedef struct cmdpair cmdpair;
 
-// "add" keyword parser
-typedef int kwparser(apdata *d, char* val);
 
 struct kwpair
 {
@@ -79,14 +84,38 @@ static int cmd_get(cmd_state *s,  char **args, int argc);
 
 
 static const cmdpair Commands[] = {
-      {"add",  cmd_add}
-    , {"del",  cmd_del}
-    , {"list", cmd_list}
-    , {"scan", cmd_scan}
-    , {"down", cmd_down}
-    , {"set",  cmd_set}
-    , {"get",  cmd_get}
+      {"add",  cmd_add,  0, 0}
+    , {"del",  cmd_del,  0, 0}
+    , {"list", cmd_list, 0, 0}
+    , {"scan", cmd_scan, 0, 0}
+    , {"down", cmd_down, 0, 0}
+    , {"set",  cmd_set,  0, 0}
+    , {"get",  cmd_get,  0, 0}
     , {0, 0}
+};
+
+
+/*
+ * "get"/"set" keyword parsers
+ */
+static int set_randmac(cmd_state *, char **args, int argc);
+static int set_aporder(cmd_state *, char **args, int argc);
+static int set_scanint(cmd_state *, char **args, int argc);
+static int set_rssi_scanint(cmd_state *, char **args, int argc);
+
+static void append_randmac(apdb *, fast_buf *out);
+static void append_aporder(apdb *, fast_buf *out);
+static void append_scanint(apdb *, fast_buf *out);
+static void append_rssi_scanint(apdb *, fast_buf *out);
+
+static const char *scan_aliases[]      = {"scanint", "scan-int", 0};
+static const char *rssi_scan_aliases[] = {"rssi-scanint", "rssi-scan-int", 0};
+static const cmdpair Set_commands[] = {
+      {"randmac",            set_randmac, append_randmac, 0}
+    , {"aporder",            set_aporder, append_aporder, 0}
+    , {"scan-interval",      set_scanint, append_scanint, scan_aliases}
+    , {"rssi-scan-interval", set_rssi_scanint, append_rssi_scanint, rssi_scan_aliases}
+    , {0, 0, 0}
 };
 
 
@@ -118,6 +147,8 @@ static const kwpair Add_kw[] = {
     , {0, 0}
 };
 
+
+static const cmdpair * find_cmd(const char *name, const cmdpair *p);
 
 
 static int
@@ -464,7 +495,7 @@ cmd_scan(cmd_state *s, char **args, int argc)
 
 // set global randmac property
 static int
-cmd_set_randmac(cmd_state *s, char **args, int argc)
+set_randmac(cmd_state *s, char **args, int argc)
 {
     char *z = args[0];
     int val = 0;
@@ -490,7 +521,7 @@ cmd_set_randmac(cmd_state *s, char **args, int argc)
 
 // configure relative AP order
 static int
-cmd_set_aporder(cmd_state *s, char **args, int argc)
+set_aporder(cmd_state *s, char **args, int argc)
 {
     if (argc < 1) return cmd_error(s, "Insufficient arguments to 'ap-order'");
 
@@ -498,6 +529,44 @@ cmd_set_aporder(cmd_state *s, char **args, int argc)
 
     cmd_response_ok(s);
     return 1;
+}
+
+static int
+set_uint(cmd_state *s, const char *key, const char *val)
+{
+    const char *err = 0;
+
+    // XXX maximum of 60 minutes?
+    long long ll = strtonum(val, 1, 60 * 60, &err);
+
+    if (ll == 0) return cmd_error(s, "invalid value %s for scan-int", val);
+
+    unsigned int v = ll & 0xffffffff;
+
+    db_set_uint(s->db, key, v);
+
+    cmd_response_ok(s);
+    return 1;
+}
+
+
+// set initial scan interval
+static int
+set_scanint(cmd_state *s, char **args, int argc)
+{
+    if (argc < 1) return cmd_error(s, "Insufficient arguments to 'ap-order'");
+
+    return set_uint(s, "scan-int", args[0]);
+}
+
+
+// set RSSI scan interval
+static int
+set_rssi_scanint(cmd_state *s, char **args, int argc)
+{
+    if (argc < 1) return cmd_error(s, "Insufficient arguments to 'ap-order'");
+
+    return set_uint(s, "rssi-scan-int", args[0]);
 }
 
 
@@ -512,16 +581,15 @@ cmd_set(cmd_state *s, char **args, int argc)
     args++;
     argc--;
 
-    if (0 == strcmp(sub, "randmac"))
-        return cmd_set_randmac(s, args, argc);
-
-    if (0 == strcmp(sub, "ap-order"))
-        return cmd_set_aporder(s, args, argc);
-
-    return cmd_error(s, "unknown 'set %s'", sub);
+    const cmdpair * p = find_cmd(sub, Set_commands);
+    return p ?  (*p->set)(s, args, argc)
+             : cmd_error(s, "unknown 'set %s'", sub);
 }
 
 
+/*
+ * get sub-commands
+ */
 
 static void
 append_randmac(apdb *db, fast_buf *out)
@@ -530,6 +598,31 @@ append_randmac(apdb *db, fast_buf *out)
     int randmac = db_get_randmac(db);
     snprintf(buf, sizeof buf, "randmac %s\n", randmac ? "true" : "false");
     fast_buf_push(out, buf, strlen(buf));
+}
+
+
+static void
+append_uint(apdb *db, const char *key, fast_buf *out)
+{
+    char buf[128];
+    unsigned int v = 0;
+
+    db_get_uint(db, key, &v);
+    snprintf(buf, sizeof buf, "%s %u\n", key, v);
+    fast_buf_push(out, buf, strlen(buf));
+}
+
+
+static void
+append_scanint(apdb *db, fast_buf *out)
+{
+    append_uint(db, "scan-int", out);
+}
+
+static void
+append_rssi_scanint(apdb *db, fast_buf *out)
+{
+    append_uint(db, "rssi-scan-int", out);
 }
 
 
@@ -560,6 +653,10 @@ end:
     return;
 }
 
+
+/*
+ * get sub-command implementation.
+ */
 static int
 cmd_get(cmd_state *s, char **args, int argc)
 {
@@ -567,34 +664,56 @@ cmd_get(cmd_state *s, char **args, int argc)
     char *key = args[0];
 
     if (0 == strcmp(key, "all")) {
-        append_randmac(s->db, &s->out);
-        append_aporder(s->db, &s->out);
-    } else if (0 == strcmp(key, "randmac"))       append_randmac(s->db, &s->out);
-      else if (0 == strcmp(key, "ap-order"))      append_aporder(s->db, &s->out);
-      else return cmd_error(s, "unknown get subcommand '%s'", key);
+        const cmdpair *p = Set_commands;
 
+        for (; p->name; p++) {
+            (*p->get)(s->db, &s->out);
+        }
+
+    } else {
+        const cmdpair *p = find_cmd(key, Set_commands);
+        if (!p) return cmd_error(s, "unknown get subcommand '%s'", key);
+
+        (*p->get)(s->db, &s->out);
+    }
     return 1;
 }
 
 
+/*
+ * Quit the event loop and end the daemon.
+ */
 static int
 cmd_down(cmd_state *s, char **args, int argc)
 {
     extern volatile uint32_t Quit;
 
     Quit = 1;   // ask the outer loop to quit gracefully
+
+    /* Send a one byte packet to wake up the event loop. */
+    fast_buf *b = &s->out;
+
+    fast_buf_reset(b);
+    fast_buf_append(b, ' ');
+
+    sockwake(s->ifs, b);
+
     cmd_response_ok(s);
     return 1;
 }
 
 
 static const cmdpair *
-find_cmd(const char *name)
+find_cmd(const char *name, const cmdpair *p)
 {
-    const cmdpair * p = Commands;
-
     for (;p->name; p++) {
         if (0 == strcmp(p->name, name)) return p;
+        if (p->aliases) {
+            const char **x = p->aliases;
+            for (; *x; x++) {
+                if (0 == strcmp(*x, name)) return p;
+            }
+        }
     }
 
     return 0;
@@ -629,10 +748,11 @@ cmd_process(cmd_state* s)
     if (n == -EINVAL) return cmd_error(s, "missing closing quote in string");
     if (n < 0)        return cmd_error(s, "parse error");
 
-    const cmdpair *c = find_cmd(args[0]);
+    const cmdpair *c = find_cmd(args[0], Commands);
 
     if (!c) return cmd_error(s, "unknown command %s", args[0]);
 
-    return (*c->handler)(s, &args[1], n-1);
+    fast_buf_reset(&s->out);
+    return (*c->set)(s, &args[1], n-1);
 }
 

@@ -68,6 +68,26 @@
 
 static void make_dir(const char *fn);
 
+
+#define _u32(x) ((uint32_t)x)
+
+static inline uint8_t*
+enc_LE_u32(uint8_t* buf, uint32_t v) {
+    *buf++ = 0xff & v;
+    *buf++ = 0xff & (v >> 8);
+    *buf++ = 0xff & (v >> 16);
+    *buf++ = 0xff & (v >> 24);
+    return buf;
+}
+
+static inline uint32_t
+dec_LE_u32(const uint8_t * p) {
+    return         p[0]
+           | (_u32(p[1]) << 8)
+           | (_u32(p[2]) << 16)
+           | (_u32(p[3]) << 24);
+}
+
 void
 db_init(apdb *db, const char *iface)
 {
@@ -77,13 +97,15 @@ db_init(apdb *db, const char *iface)
     make_dir(fn);
 
     DB *d = dbopen(fn, O_RDWR|O_CREAT|O_SYNC|O_SHLOCK, 0600, DB_BTREE, 0);
-#if 0
-    DBM *d = dbm_open(fn, O_RDWR|O_CREAT|O_SYNC|O_SHLOCK, 0600);
-#endif
     if (!d) error(1, errno, "can't open %s", fn);
 
     db->db = d;
     strlcpy(db->ifname, iface, sizeof db->ifname);
+
+    // get and set default values
+    unsigned int v = 0;
+    if (!db_get_uint(db, "scan-int", &v))       db_set_uint(db, "scan-int",      IFSCAND_INT_SCAN);
+    if (!db_get_uint(db, "rssi-scan-int", &v))  db_set_uint(db, "rssi-scan-int", IFSCAND_INT_RSSI_FAST);
 }
 
 
@@ -134,6 +156,7 @@ db_get_int(apdb *db, const char *rkey)
 {
     DBT d = db_get(db, rkey);
 
+    // XXX Yes. Ugly.
     if (d.data) {
         int v;
         memcpy(&v, d.data, sizeof(int));
@@ -141,7 +164,6 @@ db_get_int(apdb *db, const char *rkey)
     }
     return 0;
 }
-
 
 static int
 db_get_strvect(apdb *db, strvect *sv, const char *rkey)
@@ -418,6 +440,34 @@ int
 db_get_randmac(apdb *db)
 {
     return db_get_int(db, "randmac");
+}
+
+
+/*
+ * Get a uint preference named 'rkey'.
+ *
+ * Return True on suceess, False on failure.
+ */
+int
+db_get_uint(apdb *db, const char* rkey, unsigned int *p_res)
+{
+    assert(p_res);
+    DBT d = db_get(db, rkey);
+
+    if (d.data) {
+        memcpy(p_res, d.data, sizeof(int));
+        return 1;
+    }
+
+    return 0;
+}
+
+// Update an integer preference
+void
+db_set_uint(apdb *db, const char* rkey, unsigned int val)
+{
+    DBT d = { .data = &val, .size = sizeof val };
+    db_put(db, rkey, &d);
 }
 
 

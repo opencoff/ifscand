@@ -126,6 +126,7 @@ extern int mkdirhier(const char *dn, mode_t m);
 extern void error(int doexit, int errnum, const char *fmt, ...);
 extern const char *program_name;
 
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
