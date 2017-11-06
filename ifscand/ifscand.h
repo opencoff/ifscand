@@ -58,7 +58,6 @@ extern "C" {
 #include "common.h"
 
 #define IFSCAND_INT_SCAN        60  /* Scan interval between successive scans */
-#define IFSCAND_INT_RSSI        20  /* Scan interval between successive rssi measurements */
 #define IFSCAND_INT_RSSI_FAST   10  /* Fast Scan interval between successive rssi measurements */
 
 
@@ -153,7 +152,7 @@ struct ifstate
     int associated;         // flag: set if we have joined an AP
     apdata curap;           // currently associated AP
     rssi_avg  avg;          // Weighted average of RSSI_WS samples
-    int      timeout;       // Timeout interval between "scans"
+    unsigned int timeout;   // Timeout interval between "scans"
 
     int ipcfd;              // sock fd
 
@@ -168,6 +167,8 @@ struct ifstate
 
     /* Allocate once and reuse everytime. */
     nodevect      nv;
+
+    char sockpath[PATH_MAX]; // path to listen socket
 };
 typedef struct ifstate ifstate;
 
@@ -292,6 +293,22 @@ int db_del_ap(apdb *db, const char *ap);
 void db_filter_ap(apdb *db, apvect *av, nodevect *nv);
 
 
+/*
+ * Get a uint preference.
+ *
+ * Return 1 on sucess, 0 on failure.
+ */
+int db_get_uint(apdb *db, const char *key, unsigned int *p_res);
+
+
+/*
+ * Set a uint preference 'key'.
+ *
+ * Used by "set scan-int" and "set rssi-scan-int"
+ */
+void db_set_uint(apdb *db, const char *key, unsigned int val);
+
+
 /* Describe ap info in text form that can be parsed back */
 size_t db_ap_sprintf(char *buf, size_t bsiz, apdata *a);
 
@@ -363,6 +380,12 @@ extern int ifstate_scan(ifstate *ifs);
  *    < 0  -errno on error
  */
 extern int cmd_process(cmd_state *s);
+
+
+/*
+ * Wake up the listen socket with a dummy write from buf 'b'.
+ */
+extern void sockwake(ifstate *ifs, fast_buf *b);
 
 /*
  * Global vars

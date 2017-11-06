@@ -132,7 +132,7 @@ do_scan(ifstate *ifs, int low_rssi)
     if (VECT_SIZE(&av) == 0) {
         if (ifs->associated) disconnect_ap(ifs, &ifs->curap);
 
-        ifs->timeout    = IFSCAND_INT_SCAN;
+        db_get_uint(ifs->db, "scan-int", &ifs->timeout);
         ifs->associated = 0;
         goto end;
     }
@@ -160,15 +160,15 @@ do_scan(ifstate *ifs, int low_rssi)
     r = connect_ap(ifs, d);
     if (r > 0) {
         ifs->associated = 1;
-        ifs->timeout    = IFSCAND_INT_RSSI_FAST;    // XXX really?
 
+        db_get_uint(ifs->db, "rssi-scan-int", &ifs->timeout);
         rssi_avg_init(&ifs->avg);
         rssi_avg_add_sample(&ifs->avg, RSSI(&ifs->curap));
     } else {
         printlog(LOG_ERR, "can't connect to AP '%s': %s", d->apname, strerror(-r));
 
         ifs->associated = 0;
-        ifs->timeout    = IFSCAND_INT_SCAN;
+        db_get_uint(ifs->db, "scan-int", &ifs->timeout);
     }
 
 end:

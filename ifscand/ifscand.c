@@ -113,7 +113,6 @@ usage()
 int
 main(int argc, char * const* argv)
 {
-    char sockfile[PATH_MAX];
     int c;
 
     program_name = argv[0];
@@ -145,10 +144,11 @@ main(int argc, char * const* argv)
 
     const char* ifname = argv[optind];
 
-    snprintf(sockfile, sizeof sockfile, "%s.%s", IFSCAND_SOCK, ifname);
 
     apdb db;
     ifstate ifs;
+
+    memset(&ifs, 0, sizeof ifs);
 
     initlog(ifname);
 
@@ -163,9 +163,12 @@ main(int argc, char * const* argv)
         if (r != 0) error(1, errno, "can't daemonize");
     }
 
+    snprintf(ifs.sockpath, sizeof ifs.sockpath, "%s.%s", IFSCAND_SOCK, ifname);
+
     ifs.db      = &db;
-    ifs.ipcfd   = opensock(sockfile);
-    ifs.timeout = IFSCAND_INT_SCAN;
+    ifs.ipcfd   = opensock(ifs.sockpath);
+
+    db_get_uint(&db, "scan-int", &ifs.timeout);
 
     signal(SIGINT,  sighandle);
     signal(SIGTERM, sighandle);
@@ -178,7 +181,7 @@ main(int argc, char * const* argv)
     //if (pledge("stdio rpath ioctl") < 0) error(1, errno, "can't pledge");
 
     printlog(LOG_INFO, "starting daemon for %s..", ifname);
-    printlog(LOG_INFO, "Listening on %s, prefs in %s.db", sockfile, IFSCAND_PREFS);
+    printlog(LOG_INFO, "Listening on %s, prefs in %s.db", ifs.sockpath, IFSCAND_PREFS);
 
 
     /* Run state machine on startup -- scan and setup before
@@ -248,7 +251,7 @@ main(int argc, char * const* argv)
     disconnect_ap(&ifs, &ifs.curap);
     ifstate_close(&ifs);
     db_close(&db);
-    unlink(sockfile);
+    unlink(ifs.sockpath);
     
     return 0;
 }
@@ -350,7 +353,7 @@ opensock(const char *fn)
     struct sockaddr_un *un = (struct sockaddr_un *)&ss;
 
     un->sun_family = AF_UNIX;
-    snprintf(un->sun_path, sizeof un->sun_path, "%s", fn);
+    strlcpy(un->sun_path, fn, sizeof un->sun_path);
 
     if (bind(fd, (struct sockaddr *)un, sizeof *un) < 0)
         error(1, errno, "can't bind to socket %s", fn);
@@ -402,9 +405,22 @@ sockready(int fd, int wr, int delay)
 }
 
 
+/*
+ * Wake up socket with a dummy write.
+ */
+void
+sockwake(ifstate *ifs, fast_buf *b)
+{
+    struct sockaddr_un un;
+
+    un.sun_family = AF_UNIX;
+    strlcpy(un.sun_path, ifs->sockpath, sizeof un.sun_path);
+
+    sockwrite(ifs->ipcfd, b, &un);
+}
 
 /*
- * Read from a DGRAm socket into fastbuf 'b'.
+ * Read from a DGRAM socket into fastbuf 'b'.
  *
  * Will implicitly read from b->ptr.
  *

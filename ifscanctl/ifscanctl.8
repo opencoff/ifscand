@@ -144,7 +144,18 @@ point does not have a "mac" property set.
 .It Cm set ap-order Ar AP1 Op Ar AP2...
 Sets the relative order of access points when more than one
 preferred access points are found.
-.It Cm get Ar all | randmac | ap-order
+.It Cm set scan-int Ar timeout
+Sets the interval between successive scans when the daemon is
+.Sy not
+associated with an access point. The argument
+.Ar timeout
+is an unsigned integer between 1 and 3600 (max of 60 minutes).
+.It Cm set rssi-scan-int Ar timeout
+Sets the interval between successive RSSI measurements after the daemon
+is associated with an access point.  The argument
+.Ar timeout
+is an unsigned integer between 1 and 3600 (max of 60 minutes).
+.It Cm get Ar all | randmac | ap-order | scan-int | rssi-scan-int
 Display all settings or a specific setting.
 .Pp
 .Sh EXAMPLES
