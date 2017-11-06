@@ -283,7 +283,7 @@ printlog(int level, const char *fmt, ...)
         fputs(buf, stderr);
         if (buf[n-1] != '\n') fputc('\n', stderr);
     } else {
-        syslog(LOG_DAEMON|level, buf);
+        syslog(LOG_DAEMON|level, "%s", buf);
     }
 }
 
@@ -307,7 +307,7 @@ debuglog(const char *fmt, ...)
         fputs(buf, stderr);
         if (buf[n-1] != '\n') fputc('\n', stderr);
     } else {
-        syslog(LOG_DAEMON|LOG_DEBUG, buf);
+        syslog(LOG_DAEMON|LOG_DEBUG, "%s", buf);
     }
 }
 

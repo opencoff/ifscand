@@ -425,14 +425,16 @@ setwepkey(ifstate *ifs, const char *inval, int nokey)
 {
     int i, len;
     struct ieee80211_nwkey nwkey;
-    u_int8_t keybuf[IEEE80211_WEP_NKID][16];
+    struct foo {
+        uint8_t keybuf[16];
+    } wepk[IEEE80211_WEP_NKID];
     char keys[256];
     char *val = keys;
 
     strlcpy(keys, inval, sizeof keys);
 
-    bzero(&nwkey, sizeof(nwkey));
-    bzero(&keybuf, sizeof(keybuf));
+    bzero(&nwkey, sizeof nwkey);
+    bzero(&wepk, sizeof wepk);
 
     nwkey.i_wepon  = IEEE80211_NWKEY_WEP;
     nwkey.i_defkid = 1;
@@ -449,11 +451,11 @@ setwepkey(ifstate *ifs, const char *inval, int nokey)
             len = splitstr(keyv, 4, val, ',');
             if (len != 4) return -EINVAL;
             for (i = 0; i < IEEE80211_WEP_NKID; i++) {
-                len = str2hex(keybuf[i], sizeof keybuf[i], keyv[i]);
+                len = str2hex(wepk[i].keybuf, sizeof wepk[i].keybuf, keyv[i]);
                 if (len <= 0) return -EINVAL;
 
                 nwkey.i_key[i].i_keylen = len;
-                nwkey.i_key[i].i_keydat = keybuf[i];
+                nwkey.i_key[i].i_keydat = wepk[i].keybuf;
             }
         } else {
             /*
@@ -485,15 +487,16 @@ setwepkey(ifstate *ifs, const char *inval, int nokey)
                     return -EINVAL;
             }
             if (hex) {
-                len = str2hex(keybuf[9], sizeof keybuf[0], val);
+                uint8_t tmp[32];
+                len = str2hex(tmp, sizeof tmp, val);
                 if (len != hex) return -EINVAL;
             } else {
-                strlcpy(keybuf[0], val, sizeof keybuf[0]);
+                strlcpy(wepk[0].keybuf, val, sizeof wepk[0].keybuf);
                 len = vlen;
             }
 
             nwkey.i_key[0].i_keylen = len;
-            nwkey.i_key[0].i_keydat = keybuf[0];
+            nwkey.i_key[0].i_keydat = wepk[0].keybuf;
             i = 1;
         }
     }

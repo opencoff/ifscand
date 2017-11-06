@@ -395,7 +395,7 @@ disconnect_ap(ifstate *s, apdata *ap)
         ifstate_set(s, 0);
     }
 
-    memset(ap, 0, sizeof ap);
+    memset(ap, 0, sizeof *ap);
     return 1;
 }
 
@@ -420,7 +420,7 @@ start_dhcp(ifstate *ifs)
         return;
     }
 
-    const char * argv[] = { exe,  "-d", ifs->ifname, 0 };
+    char * const argv[] = { (char *const)exe,  "-d", ifs->ifname, 0 };
     char * const envp[] = { "PATH=/sbin:/usr/sbin:/bin:/usr/bin", 0 };
 
     pid_t pid = fork();
