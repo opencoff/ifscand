@@ -69,6 +69,7 @@
 static void make_dir(const char *fn);
 
 
+#if 0
 #define _u32(x) ((uint32_t)x)
 
 static inline uint8_t*
@@ -87,6 +88,7 @@ dec_LE_u32(const uint8_t * p) {
            | (_u32(p[2]) << 16)
            | (_u32(p[3]) << 24);
 }
+#endif
 
 void
 db_init(apdb *db, const char *iface)

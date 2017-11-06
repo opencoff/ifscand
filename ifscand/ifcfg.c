@@ -487,8 +487,7 @@ setwepkey(ifstate *ifs, const char *inval, int nokey)
                     return -EINVAL;
             }
             if (hex) {
-                uint8_t tmp[32];
-                len = str2hex(tmp, sizeof tmp, val);
+                len = str2hex(wepk[0].keybuf, sizeof wepk[0].keybuf, val);
                 if (len != hex) return -EINVAL;
             } else {
                 strlcpy(wepk[0].keybuf, val, sizeof wepk[0].keybuf);
