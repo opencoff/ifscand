@@ -24,12 +24,16 @@ INCS = -I$(commonsrc) -I..
 .ifdef dbg
 OFLAGS = -g
 .else
-OFLAGS = -O2 -fexpensive-optimizations
+OFLAGS = -O3
 .endif
 
 CFLAGS = $(OFLAGS) $(INCS) \
 		 -Wall -Wmissing-declarations -Wshadow \
 		 -Wpointer-arith -Wsign-compare
+
+.ifdef VERSION
+CFLAGS += -DVERSION=\"$(VERSION)\"
+.endif
 
 LDADD=	-lutil
 DPADD=	${LIBUTIL}

@@ -579,7 +579,7 @@ setmacaddr(ifstate *ifs, const uint8_t *mac, int randmac)
         uint32_t i = arc4random_uniform(NPREF);
         memcpy(addr, prefix[i], 3);
         arc4random_buf(addr+3, 3);
-    } else {
+    } else if (mac) {
         memcpy(addr, mac, 6);
     }
 

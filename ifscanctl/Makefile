@@ -18,13 +18,17 @@ BINDIR = /usr/local/bin
 .ifdef DEBUG
 OFLAGS = -g
 .else
-OFLAGS = -O2 -fexpensive-optimizations
+OFLAGS = -O3
 .endif
 
 INCS = -I$(commonsrc) -I..
 CFLAGS = $(OFLAGS) $(INCS) \
 		 -Wall -Wmissing-declarations -Wshadow \
 		 -Wpointer-arith -Wsign-compare
+
+.ifdef VERSION
+CFLAGS += -DVERSION=\"$(VERSION)\"
+.endif
 
 LDADD=	-lutil
 DPADD=	${LIBUTIL}

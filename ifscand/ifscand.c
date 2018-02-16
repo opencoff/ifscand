@@ -51,6 +51,9 @@
 #include "ifscand.h"
 #include "db.h"
 
+#ifndef VERSION
+#define VERSION  "unknown-debug"
+#endif
 
 volatile uint32_t   Quit = 0;
 volatile uint32_t   Sig  = 0;
@@ -65,19 +68,18 @@ static int sockready(int fd, int wr, int delay);
 static ssize_t sockread(int fd, fast_buf* b, struct sockaddr_un *);
 static ssize_t sockwrite(int fd, fast_buf* b, struct sockaddr_un *);
 
-extern void parse_opts(int argc, char *argv[]);
-
 /*
  * Long and short options.
  */
 static const struct option Lopt[] = {
     {"help",        no_argument, 0, 'h'},
+    {"version",     no_argument, 0, 'v'},
     {"debug",       no_argument, 0, 'd'},
     {"foreground",  no_argument, 0, 'f'},
     {"no-network",  no_argument, 0, 'N'},
     {0, 0, 0, 0}
 };
-static const char Sopt[] = "hdfN";
+static const char Sopt[] = "hvdfN";
 
 static void
 sighandle(int sig)
@@ -103,9 +105,18 @@ usage()
            "  --debug, -d       Run in debug mode (extra logs)\n"
            "  --foreground, -f  Don't daemonize into the background\n"
            "  --no-network, -N  Don't configure any IP address\n"
+           "  --version, -v     Show program version and quit\n"
            "  --help, -h        Show this help message and quit\n",
            program_name, program_name);
 
+    exit(0);
+}
+
+static void
+version()
+{
+    printf("%s - Version %s\n", program_name,
+            VERSION);
     exit(0);
 }
 
@@ -125,6 +136,10 @@ main(int argc, char * const* argv)
             default:
             case 'h':
                 usage();
+                break;
+
+            case 'v':
+                version();
                 break;
 
             case 'd':

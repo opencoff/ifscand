@@ -43,30 +43,88 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/ioctl.h>
+#include <getopt.h>
 
 #include "utils.h"
 #include "common.h"
 
+#ifndef VERSION
+#define VERSION  "unknown-debug"
+#endif
 
 /*
  * Global vars
  */
 
-static size_t arg2str(char *dest, size_t bsiz, int argc, const char *argv[]);
+static size_t arg2str(char *buf, size_t bsiz, int argc, char * const *argv);
 static int hasws(const char *s);
 static void fullwrite(int fd, void *buf, size_t n);
 static ssize_t fullread(int fd, void *buf, size_t n);
 
-int
-main(int argc, const char *argv[])
+/*
+ * Long and short options.
+ */
+static const struct option Lopt[] = {
+    {"help",        no_argument, 0, 'h'},
+    {"version",     no_argument, 0, 'v'},
+    {0, 0, 0, 0}
+};
+static const char Sopt[] = "hvdfN";
+
+static void
+usage()
 {
+    printf("%s - Control the WiFi management daemon ifscand\n"
+           "Usage: %s [options] INTERFACE COMMAND [args]\n"
+           "\n"
+           "Options:\n"
+           "  --version, -v     Show program version and quit\n"
+           "  --help, -h        Show this help message and quit\n",
+           program_name, program_name);
+
+    exit(0);
+}
+
+static void
+version()
+{
+    printf("%s - Version %s\n", program_name,
+            VERSION);
+    exit(0);
+}
+
+
+int
+main(int argc, char * const *argv)
+{
+    int c;
+
+    program_name = argv[0];
+
+    while ((c = getopt_long(argc, &argv[0], Sopt, Lopt, 0)) != EOF) {
+        switch (c) {
+            case 0:
+                break;
+
+            default:
+            case 'h':
+                usage();
+                break;
+
+            case 'v':
+                version();
+                break;
+        }
+    }
+    argc -= optind;
+    argv += optind;
+
+    if (argc < 2) error(1, 0, "Insufficient arguments. Try '%s --help'", program_name);
+
+    const char* ifname = argv[0];
     char sockfile[PATH_MAX];
     struct sockaddr_un un;
 
-    program_name = argv[0];
-    if (argc < 3) error(1, 0, "Usage: %s [options] ifname command\n", argv[0]);
-
-    const char* ifname = argv[1];
     snprintf(sockfile, sizeof sockfile, "%s.%s", IFSCAND_SOCK, ifname);
     size_t n = 1 + strlen(sockfile);    // +1 for trailing null
 
@@ -88,8 +146,12 @@ main(int argc, const char *argv[])
         error(1, errno, "can't connect to %s", sockfile);
 
     char buf[65536];
-    n = arg2str(buf, sizeof buf, argc-2, &argv[2]);
+    n = arg2str(buf, sizeof buf, argc-1, &argv[1]);
 
+    /*
+     * All commands are processed by the daemon.
+     * ifscanctl is just a I/O frontend.
+     */
     fullwrite(fd, buf, n);
     n = fullread(fd, buf, (sizeof buf)-1);
     if (n > 0) {
@@ -120,7 +182,7 @@ hasws(const char *s)
 
 
 static size_t
-arg2str(char *buf, size_t bsiz, int argc, const char *argv[])
+arg2str(char *buf, size_t bsiz, int argc, char * const *argv)
 {
     int i;
     char *p  = buf;
