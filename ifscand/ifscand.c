@@ -240,7 +240,7 @@ main(int argc, char * const* argv)
 
 #define MAXERRS 5
         if (wifi_scan(&ifs) < 0) {
-            if (++errs >= MAXERRS) {
+            if (++errs >= MAXERRS && !Debug) {
                 printlog(LOG_ERR, "Too many consecutive errors; aborting!");
                 break;
             }

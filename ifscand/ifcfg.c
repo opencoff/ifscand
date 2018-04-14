@@ -57,6 +57,7 @@ static int wait_up(ifstate *);
 static int wait_media(ifstate *);
 static int wait_bssid(ifstate *, uint8_t *bssid);
 static int get_rssi(ifstate *s, const char *apname, const uint8_t *mac, struct ieee80211_nodereq *nr);
+static int is11n(const struct ieee80211_nodereq *a);
 
 
 /*
@@ -141,8 +142,10 @@ ifstate_close(ifstate *ifs)
 
 
 /*
- * Returns an integer less than, equal to, or greater than zero if nr1's
- * RSSI is respectively greater than, equal to, or less than nr2's RSSI.
+ * Reverse comparison for qsort().
+ *
+ * We sort by 802.11n first and then 802.11b/g.
+ * i.e., we prefer 11.n even if RSSI is low.
  */
 static int
 rssicmp(const void *nr1, const void *nr2)
@@ -150,8 +153,39 @@ rssicmp(const void *nr1, const void *nr2)
     const struct ieee80211_nodereq *x = nr1, *y = nr2;
     int rx = RSSI(x),
         ry = RSSI(y);
+    int xn = is11n(x),
+        yn = is11n(y);
 
-    return ry < rx ? -1 : ry > rx;
+    if (xn && yn) {
+        if (x->nr_channel < y->nr_channel) return +1;
+        if (x->nr_channel > y->nr_channel) return -1;
+
+        return rx < ry ? +1 : (rx > ry ? -1 : 0);
+    }
+
+    if (xn)
+        return -1;
+    if (yn)
+        return +1;
+
+    return rx < ry ? +1 : (rx > ry ? -1 : 0);
+}
+
+
+/*
+ * Return true if 'a' refers to an 802.11n node.
+ */
+static int
+is11n(const struct ieee80211_nodereq *a)
+{
+    if (0 == (a->nr_flags & IEEE80211_NODEREQ_AP)) {
+        return (a->nr_flags & IEEE80211_NODEREQ_HT) ? 1 : 0;
+    }
+
+    if (a->nr_max_rxrate) return 0;
+
+    if (a->nr_rxmcs[0] != 0) return 1;
+    return 0;
 }
 
 
@@ -178,6 +212,7 @@ ifstate_scan(ifstate *ifs)
 
     na.na_node = nr;
     na.na_size = sizeof nr;
+    na.na_flags = IEEE80211_NODEREQ_AP;
     strlcpy(na.na_ifname, ifs->ifname, sizeof na.na_ifname);
 
     if (ioctl(ifs->scanfd, SIOCG80211ALLNODES, &na) != 0) return -errno;
@@ -251,14 +286,11 @@ ifstate_sprintf_node(char * buf, size_t  bsiz, struct ieee80211_nodereq *nr)
     if (nr->nr_pwrsave) PR(" powersave");
 
     if ((nr->nr_flags & (IEEE80211_NODEREQ_AP)) == 0) {
-#if 0
         if (nr->nr_flags & IEEE80211_NODEREQ_HT) {
             PR("HT-MCS%d ", nr->nr_txmcs);
         } else
-#endif
             if (nr->nr_nrates) {
-                PR(" %uM ",
-                        (nr->nr_rates[nr->nr_txrate] & IEEE80211_RATE_VAL) / 2);
+                PR(" %uM ", (nr->nr_rates[nr->nr_txrate] & IEEE80211_RATE_VAL) / 2);
             }
     } else if (nr->nr_max_rxrate) {
         PR(" %uM HT ", nr->nr_max_rxrate);
@@ -363,10 +395,12 @@ ifstate_config(ifstate *ifs, const apdata *ap, apdata *newap)
     if ((r = wait_config(ifs, &z)) < 0) return r;
 
 
+
     /*
      * Finally, fetch the latest RSSI values.
      */
-    if ((r = get_rssi(ifs, ifs->ifname, z.nr_bssid, &nr)) < 0) return r;
+    r = get_rssi(ifs, ifs->ifname, z.nr_bssid, &nr);
+    if (r < 0) return r;
 
     z.nr_rssi     = nr.nr_rssi;
     z.nr_max_rssi = nr.nr_max_rssi;
@@ -741,7 +775,7 @@ get_rssi(ifstate *ifs, const char *apname, const uint8_t *mac, struct ieee80211_
 
     strlcpy(nr->nr_ifname, ifs->ifname, sizeof nr->nr_ifname);
     strlcpy(nr->nr_nwid,   apname,      sizeof nr->nr_nwid);
-    memcpy(nr->nr_macaddr, mac,         sizeof nr->nr_macaddr);
+    if (mac) memcpy(nr->nr_macaddr, mac,         sizeof nr->nr_macaddr);
 
     nr->nr_nwid_len = aplen;
 

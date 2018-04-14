@@ -177,7 +177,8 @@ typedef struct ifstate ifstate;
 /*
  * Return normalized RSSI 
  */
-#define __norm_rssi(a)      ((int)(((float)(a)->nr_rssi / (a)->nr_max_rssi) * 100))
+#define _f(a)   ((float)a)
+#define __norm_rssi(a)      ((int)(100.0 * (_f((a)->nr_rssi)/_f((a)->nr_max_rssi))))
 #define RSSI(a)             (int)((a)->nr_max_rssi > 0 ? __norm_rssi(a) : (a)->nr_rssi)
 
 
